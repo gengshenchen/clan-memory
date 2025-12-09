@@ -73,7 +73,7 @@ else
 fi
 
 echo "To override, set QT_PREFIX_PATH or pass a path as a command-line argument."
-echo "Usage: ./build.sh [clean] [Debug|Release|...] [/path/to/qt]"
+echo "Usage: ./build.sh [clean] [Debug|Release|RelWithDebInfo|MinSizeRel] [/path/to/qt]"
 echo "Build type: $BUILD_TYPE"
 
 # Validate Qt path
@@ -101,6 +101,16 @@ fi
 
 echo "Using build system: $BUILD_SYSTEM_NAME"
 echo "Using $JOBS parallel jobs for building (if applicable)."
+echo "---"
+
+# --- Build Web ---
+echo "Building web application..."
+if [ -f "./build_web.sh" ]; then
+    chmod +x ./build_web.sh
+    ./build_web.sh
+else
+    echo "Warning: build_web.sh not found, skipping web build."
+fi
 echo "---"
 
 # --- Build Commands ---
