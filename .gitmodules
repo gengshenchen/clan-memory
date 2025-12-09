@@ -21,4 +21,4 @@
 	url = git@github.com:gengshenchen/googletest.git
 [submodule "3rdparty/QCefView"]
 	path = 3rdparty/QCefView
-	url = https://github.com/CefView/QCefView.git
+	url = git@github.com:gengshenchen/QCefView.git
