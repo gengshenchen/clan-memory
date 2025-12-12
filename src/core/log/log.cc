@@ -15,8 +15,9 @@ Log& Log::instance() {
 void Log::init(const LogConfig& config_in) {
     LogConfig config = config_in;
 #ifdef NDEBUG
-    config.console = false;
+    config.console = true;
 #endif
+
     namespace fs = std::filesystem;
     fs::create_directories(config.log_dir);
 

@@ -11,11 +11,23 @@ add_executable(${PROJECT_NAME}
 # 拷贝web app
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${PROJECT_SOURCE_DIR}/web/build
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/web/build
+    ${PROJECT_SOURCE_DIR}/web/dist
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/web/dist
     COMMENT "Copying web app to build directory"
 )
-message(STATUS "Web app will be copied to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/web/build")
+message(STATUS "Web app will be copied to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/web/dist")
+
+# 确保 Crashpad handler 被拷贝到主程序所在的目录
+if(TARGET crashpad_handler)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:crashpad_handler>          # 源文件 (自动包含 .exe)
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>       # 目标目录 (自动指向 bin/Debug 等)
+        COMMENT "Copying crashpad_handler to executable directory..."
+    )
+else()
+    message(WARNING "Target 'crashpad_handler' not found. Crashpad handler will not be copied.")
+endif()
 
 if(USE_STATIC_QML_MODULES)
     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_STATIC_QML_MODULES)
@@ -48,9 +60,6 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     $<TARGET_FILE_DIR:${PROJECT_NAME}> # 目标目录
     COMMENT "Copying QCefView binaries and resources to application directory"
 )
-
-
-
 
 # --- 国际化(i18n)配置 ---
 qt_add_translations(${PROJECT_NAME}

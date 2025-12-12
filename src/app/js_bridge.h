@@ -9,4 +9,5 @@ public:
 
 public slots:
     void test(const QString& message);
+    QString fetchFamilyTree();
 };

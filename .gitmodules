@@ -22,3 +22,6 @@
 [submodule "3rdparty/QCefView"]
 	path = 3rdparty/QCefView
 	url = git@github.com:gengshenchen/QCefView.git
+[submodule "3rdparty/SQLiteCpp"]
+	path = 3rdparty/SQLiteCpp
+	url = git@github.com:gengshenchen/SQLiteCpp.git

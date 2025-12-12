@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.19)
 
+if(UNIX AND NOT APPLE)
+    find_program(MOLD_LINKER mold)
+    if(MOLD_LINKER)
+        message(STATUS " Using mold linker (Fastest)")
+        add_link_options("-fuse-ld=mold")
+    endif()
+endif()
+
 project(clan-memory VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -69,6 +77,12 @@ add_subdirectory(3rdparty/cpp-httplib EXCLUDE_FROM_ALL)
 set (TF_BUILD_TESTS OFF)
 add_subdirectory(3rdparty/taskflow EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/QCefView)
+
+option(SQLITECPP_RUN_CPPLINT "Run cpplint.py tool" OFF)
+option(SQLITECPP_BUILD_TESTS "Build and run tests" OFF)
+option(SQLITECPP_BUILD_EXAMPLES "Build examples" OFF)
+option(SQLITECPP_INTERNAL_SQLITE "Add the internal SQLite3 source to the project" ON)
+add_subdirectory(3rdparty/SQLiteCpp)
 
 add_subdirectory(src/shared)
 add_subdirectory(src/core)

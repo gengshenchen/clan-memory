@@ -1,3 +1,3 @@
 #!/bin/bash
-cd ../web
-npm start > /dev/null 2>&1 &
+cd "$(dirname "$0")/../web"
+npm run dev

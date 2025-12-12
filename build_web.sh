@@ -11,4 +11,4 @@ npm install
 echo "Building React application for production..."
 npm run build
 
-echo "Web application build complete. Output is in the 'web/build' directory."
+echo "Web application build complete. Output is in the 'web/dist' directory."

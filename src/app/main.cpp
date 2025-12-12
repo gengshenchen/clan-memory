@@ -3,14 +3,18 @@
 #include <thread>
 
 #include <QApplication>
+#include <QCefConfig.h>
+#include <QCefContext.h>
 #include <QDebug>
 #include <QDir>
+#include <QStandardPaths>
 #include <QTranslator>
 #include <qatomic.h>
 
 #include "core/Logger.h"
 #include "core/config/config_manager.h"
 #include "core/crash/crashpad_handler.h"
+#include "core/db/database_manager.h"
 #include "core/log/log.h"
 #include "core/network/network_manager.h"
 #include "core/platform/path_manager.h"
@@ -18,10 +22,6 @@
 #include "mainwindow.h"
 #include "shared/Constants.h"
 #include "version.h"
-
-#include <QCefConfig.h>
-#include <QCefContext.h>
-
 #ifdef USE_STATIC_QML_MODULES
 #include <QQmlEngineExtensionPlugin>
 Q_IMPORT_QML_PLUGIN(app_uiPlugin)  // URI app.ui
@@ -63,24 +63,39 @@ void benchmark(const std::string& mode_desc, int N) {
 void setup_crashpad() {
     auto& paths = qt_app_template::core::PathManager::instance();
     namespace fs = std::filesystem;
-// 1. 定义路径和参数
-#ifdef PROJECT_SOURCE_DIR
-    // 开发模式：CMake传入了源码根目录宏，直接指向源码中的resources
-    fs::path handler_path = fs::path(PROJECT_SOURCE_DIR) / "3rdparty" / "crashpad" / "bin";
+
+    // --- 1. 查找 Handler 路徑 ---
+    fs::path handler_path;
+
+    // 優先策略：檢查可執行文件同級目錄 (Release/部署包標準路徑)
+#ifdef _WIN32
+    fs::path candidate = paths.executable_dir() / "crashpad_handler.exe";
 #else
-// 发布模式：使用相對於可執行文件的約定路徑
-#ifdef __APPLE__
-    fs::path handler_path = paths.executable_dir() / ".." / "Frameworks";
-#else
-    fs::path handler_path = paths.executable_dir();
-#endif
+    fs::path candidate = paths.executable_dir() / "crashpad_handler";
 #endif
 
+    if (fs::exists(candidate)) {
+        handler_path = candidate;
+        std::cout << "Found crashpad_handler at: " << handler_path.string() << std::endl;
+    }
+#ifdef PROJECT_SOURCE_DIR
+    else {
+        // 後備策略：開發環境下，嘗試去源碼目錄的 3rdparty 下找 (通常這也不太對，最好是依賴 CMake
+        // 拷貝) 但為了兼容舊邏輯保留
+        handler_path = fs::path(PROJECT_SOURCE_DIR) / "3rdparty" / "crashpad" / "bin";
 #ifdef _WIN32
-    handler_path /= "crashpad_handler.exe";
+        handler_path /= "crashpad_handler.exe";
 #else
-    handler_path /= "crashpad_handler";
+        handler_path /= "crashpad_handler";
 #endif
+    }
+#endif
+
+    if (!fs::exists(handler_path)) {
+        std::cerr << "WARNING: crashpad_handler not found at: " << handler_path.string()
+                  << std::endl;
+        return;  // 找不到就直接返回，不要嘗試初始化，否則會崩潰
+    }
 
     fs::path db_path = paths.crash_dir();
     fs::create_directories(db_path);
@@ -90,17 +105,15 @@ void setup_crashpad() {
         "dbeda80fb3f6b7ce2e48659e62206d795be35210a80e993460a9261a4ba0c4ff/"
         "minidump";
 
-    // 2. 定义自定义元数据
     std::map<std::string, std::string> annotations = {{"format", "minidump"},
-                                                      {"product", "qt-app-template"},
-                                                      {"version", "1.2.6"},
+                                                      {"product", "clan-memory"},
+                                                      {"version", "1.0.0"},
                                                       {"user_id", "user-12345"}};
-    // 3. 定义附件
+
     fs::path log_file_path =
         paths.log_dir() / (std::string(Constants::APP_NAME.toStdString()) + ".rotating.log");
     std::vector<std::string> attachments = {log_file_path.string()};
 
-    // 4. 初始化
     bool initialized = qt_app_template::core::CrashpadHandler::instance().initialize(
         handler_path.string(), db_path.string(), upload_url, annotations, attachments);
 
@@ -110,12 +123,14 @@ void setup_crashpad() {
         std::cerr << "Failed to initialize Crashpad." << std::endl;
     }
 }
+
 void crash_now() {
-    volatile int* ptr      = nullptr;
+    volatile int* ptr = nullptr;
     *ptr = 42;
 }
 
 int main(int argc, char* argv[]) {
+
 #ifdef NDEBUG
     std::cout << "This is a RELEASE build." << std::endl;
 #else
@@ -128,7 +143,7 @@ int main(int argc, char* argv[]) {
     config.setSandboxDisabled(true);
     config.addCommandLineSwitchWithValue("remote-allow-origins", "*");
     config.addCommandLineSwitchWithValue("ozone-platform", "x11");
-    //config.addCommandLineSwitch("disable-gpu-compositing"); // 如果遇到黑屏，尝试禁用 GPU 合成
+    // config.addCommandLineSwitch("disable-gpu-compositing"); // 如果遇到黑屏，尝试禁用 GPU 合成
     QApplication a(argc, argv);
 
     QCefContext cefContext(&a, argc, argv, &config);
@@ -204,6 +219,24 @@ int main(int argc, char* argv[]) {
     }
 
     Logger::instance().log("Application starting...");
+
+    // 1. 确定数据库路径 (存放在 AppData/Local/ClanMemory 下)
+    QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QDir dir(dataPath);
+    if (!dir.exists())
+        dir.mkpath(".");
+    QString dbPath = dir.filePath("clan.db");
+
+    // 2. 初始化数据库
+    auto& db = qt_app_template::core::DatabaseManager::instance();
+    db.Initialize(dbPath.toStdString());
+
+    // 3. 插入一些假数据 (测试用，之后可以注释掉)
+    db.AddDummyMember({"1", "爷爷(根)", "", 1, "", "", ""});
+    db.AddDummyMember({"2", "大伯", "", 2, "1", "", ""});
+    db.AddDummyMember({"3", "我爸", "", 2, "1", "", ""});
+    db.AddDummyMember({"4", "我", "", 3, "3", "", ""});
+
     MainWindow w;
     w.show();
     Logger::instance().log("Main window shown.");

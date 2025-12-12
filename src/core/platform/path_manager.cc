@@ -98,67 +98,73 @@ void PathManager::initialize_paths() {
         const std::string app_name = Constants::APP_NAME.toStdString();
         const std::string company_name = Constants::ORG_NAME.toStdString();
 
-        // 跨平台用戶目錄邏輯
 #ifdef _WIN32
         const char* appdata = getenv("APPDATA");
         const char* local_appdata = getenv("LOCALAPPDATA");
         const char* programdata = getenv("PROGRAMDATA");
-
-        if (!appdata || !local_appdata || !programdata) {
-            throw std::runtime_error("Could not find standard environment variables.");
-        }
+        if (!appdata || !local_appdata || !programdata)
+            throw std::runtime_error("Env vars missing");
         config_dir_ = fs::path(appdata) / company_name / app_name / "config";
         data_dir_ = fs::path(local_appdata) / company_name / app_name / "data";
         log_dir_ = fs::path(local_appdata) / company_name / app_name / "logs";
         crash_dir_ = fs::path(local_appdata) / company_name / app_name / "crashes";
         cache_dir_ = fs::path(local_appdata) / company_name / app_name / "cache";
         machine_config_dir_ = fs::path(programdata) / company_name / app_name;
+
 #elif defined(__APPLE__)
         const char* home = getenv("HOME");
-        if (!home) {
-            throw std::runtime_error("HOME environment variable not found.");
-        }
+        if (!home)
+            throw std::runtime_error("HOME not found");
         data_dir_ = fs::path(home) / "Library" / "Application Support" / app_name;
-        config_dir_ = data_dir_ / "config";  // 簡化處理，配置也放在App Support中
-        log_dir_ = data_dir_ / "logs";       // 簡化處理，配置也放在App Support中
+        config_dir_ = data_dir_ / "config";
+        log_dir_ = data_dir_ / "logs";
         crash_dir_ = data_dir_ / "crashes";
         cache_dir_ = fs::path(home) / "Library" / "Caches" / app_name;
         machine_config_dir_ = "/Library/Application Support" / app_name;
+
 #elif defined(__linux__)
         const char* home = getenv("HOME");
-        if (!home) {
-            throw std::runtime_error("HOME environment variable not found.");
-        }
+        if (!home)
+            throw std::runtime_error("HOME not found");
         const char* xdg_config_home = getenv("XDG_CONFIG_HOME");
         config_dir_ = xdg_config_home ? fs::path(xdg_config_home) : fs::path(home) / ".config";
         config_dir_ /= app_name;
-
         const char* xdg_data_home = getenv("XDG_DATA_HOME");
         data_dir_ = xdg_data_home ? fs::path(xdg_data_home) : fs::path(home) / ".local" / "share";
         data_dir_ /= app_name;
-
         log_dir_ = data_dir_ / "logs";
         crash_dir_ = data_dir_ / "crashes";
         const char* xdg_cache_home = getenv("XDG_CACHE_HOME");
         cache_dir_ = xdg_cache_home ? fs::path(xdg_cache_home) : fs::path(home) / ".cache";
         cache_dir_ /= app_name;
         machine_config_dir_ = fs::path("/etc") / app_name;
-
 #endif
 
-        // 區分開發與發布環境的資源路徑
+        // --- 資源路徑邏輯 ---
+
+        // 1. 優先檢查：可執行文件同級目錄下的資源 (Release/部署包標準結構)
+        // 檢查是否存在 "resources" 文件夾 或 "web/dist" 文件夾
+        fs::path local_resources = executable_dir_ / "resources";
+        fs::path local_web = executable_dir_ / "web" / "dist";
+
+        if (fs::exists(local_resources) || fs::exists(local_web)) {
+            // 如果找到了，說明我們運行在 Release 包或者 CMake 構建目錄中
+            // 直接將 resources_dir_ 指向 bin 目錄本身
+            resources_dir_ = executable_dir_;
+        }
+
 #ifdef PROJECT_SOURCE_DIR
-        // 開發模式：CMake傳入了源碼根目錄宏，直接指向源碼中的resources
-        resources_dir_ = fs::path(PROJECT_SOURCE_DIR) / "resources";
-#else
-        // 發布模式：使用相對於可執行文件的約定路徑
-#ifdef __APPLE__
-        resources_dir_ = executable_dir_ / ".." / "Resources";
-#else
-        resources_dir_ = executable_dir_ / ".." / "share" / app_name;
+        else {
+            // 2. 後備方案：如果沒找到，且定義了源碼目錄宏，則指向源碼目錄 (僅限開發調試)
+            resources_dir_ = fs::path(PROJECT_SOURCE_DIR) / "resources";
+        }
 #endif
-#endif
-        // 確保所有用戶可寫目錄都存在
+        // 如果都沒找到，默認為 executable_dir_，防止崩潰
+        if (resources_dir_.empty()) {
+            resources_dir_ = executable_dir_;
+        }
+
+        // 確保目錄存在
         fs::create_directories(config_dir_);
         fs::create_directories(data_dir_);
         fs::create_directories(cache_dir_);
@@ -166,10 +172,8 @@ void PathManager::initialize_paths() {
         fs::create_directories(crash_dir_);
 
     } catch (const std::exception& e) {
-        // 如果在初始化時發生嚴重錯誤，我們需要一種方式來處理它
-        // 在這裡可以選擇拋出異常，或者降級到一個安全的路徑（例如可執行文件目錄）
-        // 為了健壯性，我們暫時不拋出，而是記錄錯誤並提供一個備用路徑
         std::cerr << "CRITICAL: PathManager initialization failed: " << e.what() << std::endl;
+        // 降級處理
         if (config_dir_.empty())
             config_dir_ = executable_dir_;
         if (data_dir_.empty())
@@ -186,5 +190,4 @@ void PathManager::initialize_paths() {
             machine_config_dir_ = executable_dir_;
     }
 }
-
 }  // namespace qt_app_template::core
