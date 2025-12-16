@@ -6,8 +6,9 @@ else()
     message(STATUS "Use shared qml modules: ${QML_MODULE_STATIC}")
 endif()
 
-    set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/app/ui/)
-    message(STATUS "QT_QML_OUTPUT_DIRECTORY is set to: ${QT_QML_OUTPUT_DIRECTORY}")
+#set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/app/ui/)
+set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/resources/qml/app/ui" CACHE PATH "QML output directory" FORCE)
+message(STATUS "QT_QML_OUTPUT_DIRECTORY is set to: ${QT_QML_OUTPUT_DIRECTORY}")
 
 qt_add_qml_module(QmlUI
     URI "app.ui"

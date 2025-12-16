@@ -108,6 +108,16 @@ echo "Building web application..."
 if [ -f "./build_web.sh" ]; then
     chmod +x ./build_web.sh
     ./build_web.sh
+
+    if [ -f "resources.qrc" ]; then
+        touch resources.qrc
+        echo "Touched resources.qrc to trigger rebuild."
+    else
+        touch CMakeLists.txt
+    fi
+    # echo "Forcing Qt Resource update..."
+    # find . -name "*.qrc" -exec touch {} \;
+    # touch CMakeLists.txt
 else
     echo "Warning: build_web.sh not found, skipping web build."
 fi

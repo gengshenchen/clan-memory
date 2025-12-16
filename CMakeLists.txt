@@ -28,6 +28,7 @@ configure_file(
     src/shared/version.h.in      # 輸入模板文件
     ${PROJECT_BINARY_DIR}/version.h # 輸出頭文件到構建目錄
 )
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
     add_compile_definitions(PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     if(CMAKE_SYSTEM_NAME STREQUAL "Windows")

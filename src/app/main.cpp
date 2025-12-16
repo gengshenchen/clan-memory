@@ -130,7 +130,6 @@ void crash_now() {
 }
 
 int main(int argc, char* argv[]) {
-
 #ifdef NDEBUG
     std::cout << "This is a RELEASE build." << std::endl;
 #else
@@ -142,8 +141,18 @@ int main(int argc, char* argv[]) {
     config.setRemoteDebuggingPort(9000);
     config.setSandboxDisabled(true);
     config.addCommandLineSwitchWithValue("remote-allow-origins", "*");
+    config.addCommandLineSwitchWithValue("allow-file-access-from-files", "1");
+    config.addCommandLineSwitchWithValue("allow-universal-access-from-files", "1");
+
+#if defined(__linux__)
+    // Linux 下 GPU 加速与 Qt 事件循环经常冲突导致崩溃或黑屏，建议禁用
+    config.addCommandLineSwitchWithValue("disable-gpu", "1");
+    config.addCommandLineSwitchWithValue("disable-gpu-compositing", "1");
+
+    // 显式指定 ozone 平台为 x11 (如果你的环境是 Wayland，CEF 经常出问题，强制 x11 更稳)
     config.addCommandLineSwitchWithValue("ozone-platform", "x11");
-    // config.addCommandLineSwitch("disable-gpu-compositing"); // 如果遇到黑屏，尝试禁用 GPU 合成
+#endif
+
     QApplication a(argc, argv);
 
     QCefContext cefContext(&a, argc, argv, &config);
@@ -203,19 +212,43 @@ int main(int argc, char* argv[]) {
                 LOGERROR("網絡請求失敗: {}", data["error"].get<std::string>());
             }
         });
-    QTranslator translator;
-    // const QLocale currentLocale = QLocale();
-    const QLocale currentLocale("zh_CN");
-    // 2. 定义翻译文件的基础名 (与项目名一致)
-    const QString baseName = QCoreApplication::applicationName();
+    // QTranslator translator;
+    //  const QLocale currentLocale = QLocale();
+    // const QLocale currentLocale("zh_CN");
+    //  2. 定义翻译文件的基础名 (与项目名一致)
+    // const QString baseName = QCoreApplication::applicationName();
 
     // 3. 定义翻译文件在资源系统中的搜索路径
-    const QString path = ":/i18n/translations/";
-    if (translator.load(currentLocale, baseName, "_", path)) {
+    // const QString path = ":/i18n/translations/";
+    // if (translator.load(currentLocale, baseName, "_", path)) {
+    //     QCoreApplication::installTranslator(&translator);
+    //     qDebug() << "Successfully loaded translation for" << currentLocale.name();
+    // } else {
+    //     qDebug() << "Could not load translation for" << currentLocale.name();
+    // }
+
+    const QLocale currentLocale = QLocale::system();
+    // const QLocale currentLocale("zh_CN");
+    // 2. 设置默认 Locale (这对日期、数字格式化很重要)
+    QLocale::setDefault(currentLocale);
+
+    // 3. 加载翻译
+    QTranslator translator;
+    std::filesystem::path transDir = paths.resources_dir() / "translations";
+    QString transPath = QString::fromStdString(transDir.string());
+
+    // 4. 智能加载
+    // 参数含义: (Locale对象, 前缀名, 分隔符, 目录)
+    // 逻辑: 如果 currentLocale 是 "zh_CN"，它会按顺序尝试加载：
+    //      1. bin/resources/translations/clan-memory_zh_CN.qm
+    //      2. bin/resources/translations/clan-memory_zh.qm  <-- 你的 CMake 生成的是这个
+    //      3. bin/resources/translations/clan-memory.qm
+    if (translator.load(currentLocale, "clan-memory", "_", transPath)) {
         QCoreApplication::installTranslator(&translator);
-        qDebug() << "Successfully loaded translation for" << currentLocale.name();
+        qDebug() << "Successfully loaded translations for:" << currentLocale.name();
     } else {
-        qDebug() << "Could not load translation for" << currentLocale.name();
+        qWarning() << "Failed to load translations for:" << currentLocale.name() << "from"
+                   << transPath;
     }
 
     Logger::instance().log("Application starting...");
@@ -236,12 +269,13 @@ int main(int argc, char* argv[]) {
     db.AddDummyMember({"2", "大伯", "", 2, "1", "", ""});
     db.AddDummyMember({"3", "我爸", "", 2, "1", "", ""});
     db.AddDummyMember({"4", "我", "", 3, "3", "", ""});
-
-    MainWindow w;
-    w.show();
-    Logger::instance().log("Main window shown.");
-    int result = a.exec();
-
+    int result = 0;
+    {
+        MainWindow w;
+        w.show();
+        Logger::instance().log("Main window shown.");
+        result = a.exec();
+    }
     qt_app_template::core::Log::instance().deinit();
     return result;
 }

@@ -145,12 +145,11 @@ void PathManager::initialize_paths() {
         // 1. 優先檢查：可執行文件同級目錄下的資源 (Release/部署包標準結構)
         // 檢查是否存在 "resources" 文件夾 或 "web/dist" 文件夾
         fs::path local_resources = executable_dir_ / "resources";
-        fs::path local_web = executable_dir_ / "web" / "dist";
 
-        if (fs::exists(local_resources) || fs::exists(local_web)) {
+        if (fs::exists(local_resources))  {
             // 如果找到了，說明我們運行在 Release 包或者 CMake 構建目錄中
             // 直接將 resources_dir_ 指向 bin 目錄本身
-            resources_dir_ = executable_dir_;
+            resources_dir_ = local_resources;
         }
 
 #ifdef PROJECT_SOURCE_DIR
