@@ -1,5 +1,5 @@
 #include "task_manager.h"
-namespace qt_app_template::core {
+namespace clan::core {
 TaskManager& TaskManager::instance() {
     static TaskManager instance;
         return instance;
@@ -16,5 +16,5 @@ TaskManager::~TaskManager() {
 void TaskManager::enqueue(std::function<void()> task) {
     executor_.silent_async(task);  // silent_async 用於提交無返回值的任務
 }
-}  // namespace qt_app_template::core
+}  // namespace clan::core
 

@@ -27,17 +27,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/app/mainwindow.cpp" line="25"/>
-        <source>My App</source>
+        <location filename="../../src/app/mainwindow.cpp" line="47"/>
+        <source>Clan</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/app/mainwindow.cpp" line="74"/>
+        <location filename="../../src/app/mainwindow.cpp" line="78"/>
         <source>&amp;File</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/app/mainwindow.cpp" line="75"/>
+        <location filename="../../src/app/mainwindow.cpp" line="79"/>
         <source>E&amp;xit</source>
         <translation type="unfinished"></translation>
     </message>

@@ -13,7 +13,7 @@
 #include <memory>
 #include <string>
 
-namespace qt_app_template::core {
+namespace clan::core {
 
 struct LogConfig {
     bool use_async = false;
@@ -51,27 +51,27 @@ private:
     std::shared_ptr<spdlog::logger> logger_;
 };
 
-}  // namespace qt_app_template::core
+}  // namespace clan::core
 
 // -------------------- 宏定义 --------------------
 
 // 推荐：用 SPDLOG_LOGGER_CALL 以便未来加 __FILE__/__LINE__
 #define LOGTRACE(...)   \
     SPDLOG_LOGGER_CALL( \
-        qt_app_template::core::Log::instance().logger(), spdlog::level::trace, __VA_ARGS__)
+        clan::core::Log::instance().logger(), spdlog::level::trace, __VA_ARGS__)
 #define LOGDEBUG(...)   \
     SPDLOG_LOGGER_CALL( \
-        qt_app_template::core::Log::instance().logger(), spdlog::level::debug, __VA_ARGS__)
+        clan::core::Log::instance().logger(), spdlog::level::debug, __VA_ARGS__)
 #define LOGINFO(...)    \
     SPDLOG_LOGGER_CALL( \
-        qt_app_template::core::Log::instance().logger(), spdlog::level::info, __VA_ARGS__)
+        clan::core::Log::instance().logger(), spdlog::level::info, __VA_ARGS__)
 #define LOGWARN(...)    \
     SPDLOG_LOGGER_CALL( \
-        qt_app_template::core::Log::instance().logger(), spdlog::level::warn, __VA_ARGS__)
+        clan::core::Log::instance().logger(), spdlog::level::warn, __VA_ARGS__)
 #define LOGERROR(...)   \
     SPDLOG_LOGGER_CALL( \
-        qt_app_template::core::Log::instance().logger(), spdlog::level::err, __VA_ARGS__)
+        clan::core::Log::instance().logger(), spdlog::level::err, __VA_ARGS__)
 #define LOGCRITICAL(...) \
     SPDLOG_LOGGER_CALL(  \
-        qt_app_template::core::Log::instance().logger(), spdlog::level::critical, __VA_ARGS__)
+        clan::core::Log::instance().logger(), spdlog::level::critical, __VA_ARGS__)
 

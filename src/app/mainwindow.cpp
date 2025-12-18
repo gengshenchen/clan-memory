@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QDockWidget>
+#include <QJsonDocument>
 #include <QPushButton>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -11,6 +12,7 @@
 #include <QQuickWidget>
 #include <QToolBar>
 #include <QVBoxLayout>
+#include <qlogging.h>
 
 #include "core/Logger.h"
 #include "core/log/log.h"
@@ -18,16 +20,35 @@
 #include "js_bridge.h"
 #include "ui_mainwindow.h"
 #include "widgets/LogViewer.h"  // from gui-widgets
+
+void printf_resource_runtime() {
+    // ---  ---
+    qDebug() << "=========================================================";
+    qDebug() << "Listing all available application resources at runtime...";
+    QDirIterator it(":", QDirIterator::Subdirectories);
+    bool foundAny = false;
+    while (it.hasNext()) {
+        foundAny = true;
+        // 打印找到的每一个资源的路径
+        qDebug() << "  Found resource:" << it.next();
+    }
+
+    if (!foundAny) {
+        qDebug() << "  !!! CRITICAL: No resources found inside the application. !!!";
+        qDebug() << "  This confirms the resource file was not linked correctly.";
+    }
+    qDebug() << "=========================================================";
+}
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       ui(new Ui::MainWindow) {
     ui->setupUi(this);
-    setWindowTitle(tr("My App"));
+    setWindowTitle(tr("Clan"));
     setWindowIcon(QIcon(":/icons/app-icon.svg"));
-    setFixedWidth(800);   // 设置窗口宽度为800像素
-    setFixedHeight(600);  // 设置窗口高度为60素
+    setFixedWidth(800);
+    setFixedHeight(600);
     setupMenus();
-    LOGINFO("hello world");
 
     QToolBar* toolBar = addToolBar("Main");
     QPushButton* button = new QPushButton("Call JS", this);
@@ -39,24 +60,7 @@ MainWindow::MainWindow(QWidget* parent)
     });
 
     // setupDocks();
-#if 0
-        // ---  ---
-        qDebug() << "=========================================================";
-        qDebug() << "Listing all available application resources at runtime...";
-        QDirIterator it(":", QDirIterator::Subdirectories);
-        bool foundAny = false;
-        while (it.hasNext()) {
-            foundAny = true;
-            // 打印找到的每一个资源的路径
-            qDebug() << "  Found resource:" << it.next();
-        }
-
-        if (!foundAny) {
-            qDebug() << "  !!! CRITICAL: No resources found inside the application. !!!";
-            qDebug() << "  This confirms the resource file was not linked correctly.";
-        }
-        qDebug() << "=========================================================";
-#endif  // --- 调试代码结束 ---
+    //printf_resource_runtime();
 
     m_jsBridge = new JsBridge(this);
     embedCefView();
@@ -108,10 +112,10 @@ void MainWindow::embedQmlView() {
     // QString qmlFilePath = (strQmlRootPath) + "/app/ui/Dashboard/Dashboard.qml";
     // quickWidget->setSource(QUrl::fromLocalFile(qmlFilePath));
 
-    // qDebug() << "QCoreApplication::applicationDirPath:" << QCoreApplication::applicationDirPath();
-    // qDebug() << "strQmlRootPath:" << strQmlRootPath;
+    // qDebug() << "QCoreApplication::applicationDirPath:" <<
+    // QCoreApplication::applicationDirPath(); qDebug() << "strQmlRootPath:" << strQmlRootPath;
     // 1. 获取资源根目录 (bin/resources)
-    auto& paths = qt_app_template::core::PathManager::instance();
+    auto& paths = clan::core::PathManager::instance();
 
     // 2. 拼接 QML 模块的 import 路径: bin/resources/qml
     std::filesystem::path qmlImportPath = paths.resources_dir() / "qml";
@@ -158,7 +162,7 @@ void MainWindow::embedCefView() {
 
 #if defined(NDEBUG)
     // 1. 获取路径 (利用 PathManager 指向 bin/resources)
-    auto& paths = qt_app_template::core::PathManager::instance();
+    auto& paths = clan::core::PathManager::instance();
     // 注意：Vite 生成的是 dist 目录，不是 build
     std::filesystem::path webIndex = paths.resources_dir() / "web" / "dist" / "index.html";
 
@@ -188,11 +192,88 @@ void MainWindow::embedCefView() {
     setCentralWidget(central);
 }
 
+// web --call-- c++
 void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameId& frameId,
                                 const QString& method, const QVariantList& arguments) {
+    // 1. 既有的测试逻辑
     if (method == "test") {
         if (arguments.size() > 0) {
             m_jsBridge->test(arguments.at(0).toString());
         }
     }
+    // 2. 【新增】核心业务：获取家谱数据
+    else if (method == "fetchFamilyTree") {
+        qInfo() << "[C++] Bridge: Received fetchFamilyTree request";
+
+        // A. 从数据库获取数据 (通过 JsBridge 封装)
+        // 这里的 jsonStr 格式如: [{"id":"1", "name":"爷爷", "parentId":""}, ...]
+        QString jsonStr = m_jsBridge->fetchFamilyTree();
+
+        // B. 构造回调 JS 代码
+        // 我们约定：前端必须挂载一个 window.onFamilyTreeDataReceived 函数来接收数据
+        // 注意：jsonStr 已经是合法的 JSON 字符串，直接拼接进 JS 代码中
+        // 为了防止 JSON 中有特殊字符导致 JS 语法错误，建议最好用 base64
+        // 传输，但为了演示简单，先直接拼。
+        QString jsCode =
+            QString(
+                "if(window.onFamilyTreeDataReceived) { window.onFamilyTreeDataReceived(%1); } else "
+                "{ console.warn('Frontend callback not found'); }")
+                .arg(jsonStr);
+
+        // C. 执行 JS，将数据“推”回前端
+        if (m_cefView) {
+            m_cefView->executeJavascript(frameId, jsCode, "");
+            qDebug() << "[C++] Data sent to frontend, length:" << jsonStr.length();
+        }
+    }
+    else if (method == "showMemberDetail") {
+        // arguments[0] 是我们传过来的 ID
+        if (!arguments.isEmpty()) {
+            QString memberId = arguments.first().toString();
+            QString msg = QString("前端点击了成员 ID: %1").arg(memberId);
+
+            qInfo() << "[C++] " << msg;
+
+            // 弹个原生框证明成功了 (需要包含 <QMessageBox>)
+            // QMessageBox::information(this, "点击事件", msg);
+            // 如果不想弹框，只看控制台日志也可以
+        }
+    }
+    else if (method == "fetchMemberDetail") {
+        if (!arguments.isEmpty()) {
+            // 1. 获取参数
+            QString id = arguments.first().toString();
+            qInfo() << "[C++] Fetching details for Member ID:" << id;
+
+            // 2. 调用 Bridge (逻辑封装在 Bridge 中)
+            QString jsonResult = m_jsBridge->fetchMemberDetail(id);
+
+            // 3. 回调前端
+            // 注意：如果 jsonResult 是 "null"，前端判断 member 为空显示“未找到”
+            QString jsCode = QString("if(window.onMemberDetailReceived) { window.onMemberDetailReceived(%1); }")
+                                 .arg(jsonResult);
+
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, jsCode, "");
+            }
+        }
+    }
+
+    else if (method == "getLocalImage") {
+        if (!arguments.isEmpty()) {
+            QString path = arguments.first().toString();
+            // 调用 Bridge 读取并压缩图片
+            QString base64Data = m_jsBridge->getLocalImage(path);
+
+            // 回调前端：这里我们定义一个新的回调名 onLocalImageLoaded
+            // 为了区分是哪张图，我们把 path 也传回去，或者简单点，直接由前端 Promise 处理
+            // 这里演示简单的回调模式：
+            QString jsCode = QString("if(window.onLocalImageLoaded) { window.onLocalImageLoaded('%1', '%2'); }")
+                                 .arg(path.replace("\\", "\\\\")) // 处理路径转义
+                                 .arg(base64Data);
+
+            if (m_cefView) m_cefView->executeJavascript(frameId, jsCode, "");
+        }
+    }
+
 }

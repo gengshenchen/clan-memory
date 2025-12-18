@@ -1,0 +1,135 @@
+第一阶段：基础设施与架构验证 (✅ 已完成)
+构建系统：CMake 模块化架构 (src/core, src/app, src/shared).
+混合渲染：Qt Widgets (主窗口) + QCefView (React 前端) + QML (仪表盘).
+资源管理：统一资源目录 (bin/resources)，打通 Web/Translations/Crashpad 路径。
+稳定性：集成 Crashpad 崩溃上报，解决 Linux 下 GPU 冲突。
+
+第二阶段：核心数据层建设 (当前重点 🚧)
+族谱软件的核心是关系数据。我们需要在 src/core/db 中完善数据库模型。
+
+数据库 Schema 设计 (SQLite):
+
+Members (成员表): ID, 姓名, 性别, 生卒日期, 简介, 头像路径。
+Relationships (关系表): ID, SourceID (父/母), TargetID (子), Type (父子/夫妻)。
+Events (事迹表): ID, MemberID, 日期, 标题, 详情, 地点 (用于时间轴)。
+Media (多媒体表): ID, 关联对象ID, 文件路径, 类型 (照片/视频/文档)。
+
+C++ DAO 层封装 (DatabaseManager):
+实现 AddMember, UpdateMember, DeleteMember。
+实现复杂的查询逻辑：比如 GetAncestors(id) (查祖先) 和 GetDescendants(id) (查子孙)。
+
+第三阶段：JSBridge 交互通道 (联通 React 与 C++)
+利用你已经有的 js_bridge.cpp，打通 Web 界面和 C++ 数据库的“任督二脉”。
+C++ -> Web:
+当数据库数据更新时，发射信号通知 Web 刷新图表。
+cefView->sendEvent("updateTreeData", jsonPayload);
+Web -> C++:
+
+React 组件中点击“保存” -> 调用 CallBridge.saveMember(data) -> C++ 写入 SQLite。
+React 组件中点击“上传照片” -> 调用 C++ 打开原生文件选择对话框。
+
+第四阶段：可视化与业务功能 (应用层)
+这里我们要充分利用 混合架构 的优势：
+
+家族树谱系图 (React + D3.js/Cytoscape.js):
+
+为什么用 Web? 复杂的树状拓扑图在 Web 前端有非常成熟的库（如 React Flow），比用 QGraphicsView 写起来快得多且效果炫酷。
+
+功能：展示无限层级的家谱树，支持缩放、拖拽、点击查看详情。
+
+成员详情编辑 (Qt Widgets / QML):
+
+为什么用 Native? 表单录入、日期选择、文件管理，原生控件体验更好，且这部分功能不需要花哨的特效。
+
+大事年表 (Timeline):
+
+以时间轴的方式展示家族或个人的生平大事。
+
+多媒体库:
+
+照片墙、老视频播放（利用 CEF 或 Qt Multimedia）。
+
+第五阶段：导入导出与部署
+GEDCOM 标准支持:
+
+实现 GEDCOM (家谱数据交换标准格式) 的解析与导出，让用户能迁移数据。
+
+打包发布:
+
+Windows: 使用 CPack/NSIS 打包成安装程序 (包含 VC Redist, WebView2 依赖)。
+
+Linux: 打包成 .deb 或 .AppImage (解决依赖地狱)。
+
+
+第一阶段：打地基 —— 数据层与通信层 (Infrastructure)
+
+目标： 让 React 能从 C++ 取到（假的）数据并在界面显示。
+
+
+
+数据库搭建 (C++):
+
+引入 SQLx 或 QtSql: 鉴于您现在的依赖管理（CMake），使用 QtSql (Qt 自带) 也是极好的选择，集成最快。
+
+设计表结构: 在 C++ 中编写初始化代码，创建 Members (成员表) 和 Relationships (关系表)。
+
+编写 DAO (数据访问对象): 创建 ClanDao 类，实现 getAllMembers(), getMemberById()。
+
+完善通信桥梁 (src/app/js_bridge.cpp):
+
+定义 API: 修改 JsBridge 类，增加以下 slot 函数供前端调用：fetchFamilyTree(): 返回宗族树 JSON 字符串。
+
+fetchMemberDetail(QString id): 返回某人的详细信息。
+
+序列化: 使用 QJsonDocument 将 C++ 数据转为 JSON 字符串。
+
+前端基础 (web/):
+
+安装依赖: npm install d3 antd axios (或直接用 window.bridge)。
+
+搭建路由: 使用 react-router-dom，创建两个基础页面：/: 首页（宗族树）。
+
+/member/:id: 详情页。
+
+第二阶段：核心视觉 —— 可视化宗族树 (Visualization)
+
+目标： 屏幕上能画出那棵大树，并且能拖拽、缩放。
+
+
+
+前端实现 (React + D3.js):
+
+创建 FamilyTree 组件: 按照我们之前生成的 D3 代码，移植到 web/src/components/FamilyTree.tsx。
+
+对接数据: 在 useEffect 中调用 window.bridge.fetchFamilyTree()，拿到数据后喂给 D3。
+
+交互: 实现点击节点 -> 跳转到详情页路由。
+
+后端支持 (C++):
+
+树结构转换: 数据库里存储的是扁平的（A是B的父亲），C++ 需要写一个递归算法，把它转换成 D3 需要的嵌套 JSON (children: [...])。
+
+第三阶段：血肉填充 —— 成员数字纪念馆 (Memorial)
+
+目标： 点击名字，能看到爷爷的照片、生平、视频。
+
+
+
+文件系统管理 (C++):
+
+资源目录: 确定一个本地存储目录（如 ./data/media/）。
+
+自定义协议 (Scheme): 在 CEF 配置中注册 clan:// 协议。前端 <img src="clan://photos/grandpa.jpg"> -> C++ 拦截请求 -> 读取本地硬盘文件 -> 返回二进制流。
+
+这是解决浏览器无法直接读本地文件的关键。
+
+前端详情页 (React):
+
+UI 布局: 使用 Ant Design 的 Descriptions (描述列表) 展示生平，Image (图片墙) 展示照片，ReactPlayer 播放视频。
+
+第四阶段：实用功能 —— 录入与搜索 (Utilities)
+
+目标： 把您那本实体书里的内容录入进去。
+
+
+

@@ -4,7 +4,7 @@
 #include <filesystem>
 
 // 為我們所有的核心代碼定義頂級和次級命名空間
-namespace qt_app_template::core {
+namespace clan::core {
 
 class PathManager {
 public:
@@ -49,7 +49,7 @@ private:
     std::filesystem::path machine_config_dir_;  // 安装程序负责创建
 };
 
-}  // namespace qt_app_template::core
+}  // namespace clan::core
    //
 
 #endif  // QTAPPTEMPLATE_SRC_CORE_PLATFORM_PATH_MANAGER_H_

@@ -11,7 +11,7 @@
 
 #include "taskflow/taskflow.hpp"
 
-namespace qt_app_template::core {
+namespace clan::core {
 class TaskManager {
   public:
     static TaskManager& instance();
@@ -33,4 +33,4 @@ class TaskManager {
 
     tf::Executor executor_;
 };
-}  // namespace qt_app_template::core
+}  // namespace clan::core

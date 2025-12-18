@@ -5,7 +5,7 @@
 
 #include "spdlog/spdlog.h"
 
-namespace qt_app_template::core {
+namespace clan::core {
 
 Log& Log::instance() {
     static Log inst;
@@ -77,5 +77,5 @@ void Log::deinit() {
     spdlog::shutdown();
 }
 
-}  // namespace qt_app_template::core
+}  // namespace clan::core
 

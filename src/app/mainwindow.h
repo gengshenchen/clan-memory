@@ -33,7 +33,6 @@ class MainWindow : public QMainWindow {
   public:
     MainWindow(QWidget* parent = nullptr);
     ~MainWindow();
-    void testJJJJ();
 
 private slots:
     void onInvokeMethod(const QCefBrowserId& browserId,

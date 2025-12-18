@@ -2,12 +2,12 @@
 #define QTAPPTEMPLATE_SRC_SHARED_VERSION_H
 #include <string_view>
 
-namespace qt_app_template::version {
+namespace clan::version {
 constexpr std::string_view kVersionString = "@PROJECT_VERSION@";
 // clang-format off
 constexpr int kVersionMajor = @PROJECT_VERSION_MAJOR@;
 constexpr int kVersionMinor = @PROJECT_VERSION_MINOR@;
 constexpr int kVersionPatch = @PROJECT_VERSION_PATCH@;
-}  // namespace qt_app_template::version
+}  // namespace clan::version
 // clang-format on
 #endif

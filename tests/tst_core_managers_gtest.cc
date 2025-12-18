@@ -11,7 +11,7 @@
 #include "core/task/task_manager.h"
 #include "shared/Constants.h"
 // 使用我們的命名空間
-using namespace qt_app_template::core;
+using namespace clan::core;
 
 // 創建一個測試夾具，用於初始化和清理工作
 class CoreManagersTest : public testing::Test {
@@ -19,8 +19,8 @@ class CoreManagersTest : public testing::Test {
     // 在所有測試用例開始前，執行一次
     static void SetUpTestSuite() {
         // 初始化日誌
-        auto& paths = qt_app_template::core::PathManager::instance();
-        qt_app_template::core::Log::instance().init({
+        auto& paths = clan::core::PathManager::instance();
+        clan::core::Log::instance().init({
             .use_async = true,
             .log_dir = paths.log_dir(),
             .log_name = Constants::APP_NAME.toStdString(),
@@ -67,8 +67,8 @@ TEST_F(CoreManagersTest, ConfigManagerReadsAndWrites) {
     config.save();
 
     // 3. 創建一個新的ConfigManager實例來重新加載，驗證持久化
-    qt_app_template::core::ConfigManager::instance().load(test_ini_path_);
-    EXPECT_EQ(qt_app_template::core::ConfigManager::instance().getString("User", "Name", ""),
+    clan::core::ConfigManager::instance().load(test_ini_path_);
+    EXPECT_EQ(clan::core::ConfigManager::instance().getString("User", "Name", ""),
               "Karl");
 }
 

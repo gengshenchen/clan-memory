@@ -10,4 +10,6 @@ public:
 public slots:
     void test(const QString& message);
     QString fetchFamilyTree();
+    QString fetchMemberDetail(const QString& id);
+    QString getLocalImage(const QString& filePath);
 };

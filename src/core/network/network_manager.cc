@@ -8,7 +8,7 @@
 #include "log/log.h"  // 使用日誌
 #include "platform/path_manager.h"
 #include "task/task_manager.h"  // 我們將使用自己的任務管理器
-namespace qt_app_template::core {
+namespace clan::core {
 
 NetworkManager& NetworkManager::instance() {
     static NetworkManager instance;
@@ -18,12 +18,12 @@ NetworkManager& NetworkManager::instance() {
 void NetworkManager::get(const std::string& host, const std::string& path,
                          HttpResponseCallback callback) {
     // 將網絡請求提交到我們的任務管理器中，在後台線程執行
-    qt_app_template::core::TaskManager::instance().enqueue([host, path, callback]() {
+    clan::core::TaskManager::instance().enqueue([host, path, callback]() {
         try {
             // 為HTTPS創建客戶端，注意需要OpenSSL依賴  #TODO openssl
             httplib::Client cli(host);
             // 需要CA證書文件
-            auto& paths = qt_app_template::core::PathManager::instance();
+            auto& paths = clan::core::PathManager::instance();
             cli.set_ca_cert_path(paths.resources_dir().string() + "/certs/cacert.pem");
             // Disable cert verification
             cli.enable_server_certificate_verification(true);
@@ -54,7 +54,7 @@ void NetworkManager::post(const std::string& host, const std::string& path, cons
         try {
             httplib::Client cli(host);
 
-            auto& paths = qt_app_template::core::PathManager::instance();
+            auto& paths = clan::core::PathManager::instance();
             cli.set_ca_cert_path(paths.resources_dir().string() + "/certs/cacert.pem");
             cli.enable_server_certificate_verification(true);
 
@@ -73,4 +73,4 @@ void NetworkManager::post(const std::string& host, const std::string& path, cons
         }
     });
 }
-}  // namespace qt_app_template::core
+}  // namespace clan::core

@@ -16,7 +16,7 @@
 #include <unistd.h>
 #endif
 
-namespace qt_app_template::core {
+namespace clan::core {
 
 namespace fs = std::filesystem;
 
@@ -189,4 +189,4 @@ void PathManager::initialize_paths() {
             machine_config_dir_ = executable_dir_;
     }
 }
-}  // namespace qt_app_template::core
+}  // namespace clan::core

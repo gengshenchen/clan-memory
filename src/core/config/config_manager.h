@@ -2,7 +2,7 @@
 #include <string>
 
 #include "simpleini/SimpleIni.h"  // 直接包含submodule中的頭文件
-namespace qt_app_template::core {
+namespace clan::core {
 class ConfigManager {
 public:
     static ConfigManager& instance();
@@ -29,5 +29,5 @@ private:
     std::string m_filePath;
     bool m_isDirty = false;
 };
-}  // namespace qt_app_template::core
+}  // namespace clan::core
 

@@ -9,7 +9,7 @@ namespace crashpad {
 class CrashpadClient;
 }
 
-namespace qt_app_template::core {
+namespace clan::core {
 
 /**
  * @class CrashpadHandler
@@ -66,4 +66,4 @@ private:
     crashpad::CrashpadClient* client_ = nullptr;
 };
 
-}  // namespace qt_app_template::core
+}  // namespace clan::core

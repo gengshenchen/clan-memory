@@ -1,5 +1,5 @@
 #include "config_manager.h"
-namespace qt_app_template::core {
+namespace clan::core {
 ConfigManager& ConfigManager::instance() {
     static ConfigManager instance;
     return instance;
@@ -60,5 +60,5 @@ void ConfigManager::setBool(const std::string& section, const std::string& key, 
     m_isDirty = true;
 }
 
-}  // namespace qt_app_template::core
+}  // namespace clan::core
 

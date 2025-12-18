@@ -61,7 +61,7 @@ void benchmark(const std::string& mode_desc, int N) {
 }
 
 void setup_crashpad() {
-    auto& paths = qt_app_template::core::PathManager::instance();
+    auto& paths = clan::core::PathManager::instance();
     namespace fs = std::filesystem;
 
     // --- 1. 查找 Handler 路徑 ---
@@ -114,7 +114,7 @@ void setup_crashpad() {
         paths.log_dir() / (std::string(Constants::APP_NAME.toStdString()) + ".rotating.log");
     std::vector<std::string> attachments = {log_file_path.string()};
 
-    bool initialized = qt_app_template::core::CrashpadHandler::instance().initialize(
+    bool initialized = clan::core::CrashpadHandler::instance().initialize(
         handler_path.string(), db_path.string(), upload_url, annotations, attachments);
 
     if (initialized) {
@@ -136,6 +136,7 @@ int main(int argc, char* argv[]) {
     std::cout << "This is a DEBUG build." << std::endl;
 #endif
 
+    // cef config
     QCefConfig config;
     config.setBridgeObjectName("CallBridge");
     config.setRemoteDebuggingPort(9000);
@@ -154,36 +155,35 @@ int main(int argc, char* argv[]) {
 #endif
 
     QApplication a(argc, argv);
-
     QCefContext cefContext(&a, argc, argv, &config);
-
     a.setOrganizationName(Constants::ORG_NAME);
     a.setApplicationName(Constants::APP_NAME);
-    // PathManager是第一個被實例化的，因為其他管理器依賴它
-    auto& paths = qt_app_template::core::PathManager::instance();
-    qt_app_template::core::ConfigManager::instance().load(paths.config_dir().string());
+
+    // init path
+    auto& paths = clan::core::PathManager::instance();
+    clan::core::ConfigManager::instance().load(paths.config_dir().string());
 
     const int log_count = 1132;
     // clang-format off
-    qt_app_template::core::Log::instance().init({
+    clan::core::Log::instance().init({
         .use_async = true,
         .log_dir = paths.log_dir(),
         .log_name = Constants::APP_NAME.toStdString(),
     });
     // clang-format on
-    setup_crashpad();
 
-    qt_app_template::core::Log::instance().set_level(spdlog::level::trace);
+    // setup_crashpad();
+
+    clan::core::Log::instance().set_level(spdlog::level::trace);
 
     // benchmark("vim-commentarySync + Rotating", log_count);
 
-    qt_app_template::core::ConfigManager::instance().load(
-        (paths.config_dir() / "settings.ini").string());
+    clan::core::ConfigManager::instance().load((paths.config_dir() / "settings.ini").string());
 
     // 使用版本信息
     LOGINFO("Starting {} version {}",
             Constants::APP_NAME.toStdString(),
-            qt_app_template::version::kVersionString.data());
+            clan::version::kVersionString.data());
     LOGINFO("exe path: {}", paths.executable_path().string());
     LOGINFO("data path: {}", paths.data_dir().string());
     LOGINFO("executable_dir : {}", paths.executable_dir().string());
@@ -192,40 +192,27 @@ int main(int argc, char* argv[]) {
     LOGINFO("crash_dir : {}", paths.crash_dir().string());
     LOGINFO("machine_config_dir : {}", paths.machine_config_dir().string());
     LOGINFO("resources_dir : {}", paths.resources_dir().string());
+
     // 2. 使用任務管理器執行異步任務
-    std::stringstream ss;
-    ss << std::this_thread::get_id();
-    LOGINFO("主線程ID: {}", ss.str());
-    qt_app_template::core::TaskManager::instance().enqueue([]() {
-        LOGINFO("這是一個來自後台線程的問候！線程ID: {}",
-                std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    });
+    // std::stringstream ss;
+    // ss << std::this_thread::get_id();
+    // LOGINFO("主線程ID: {}", ss.str());
+    // clan::core::TaskManager::instance().enqueue([]() {
+    //     LOGINFO("這是一個來自後台線程的問候！線程ID: {}",
+    //             std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    // });
 
     // 3. 使用網絡管理器獲取數據
-    qt_app_template::core::NetworkManager::instance().get(
-        "https://jsonplaceholder.typicode.com", "/todos/1", [](bool success, const json& data) {
-            if (success) {
-                LOGINFO("網絡請求成功，獲取標題: {}", data["title"].get<std::string>());
-                // 【關鍵】如果要在回調中更新UI，必須使用Qt的機制切回主線程
-                // QMetaObject::invokeMethod(...);
-            } else {
-                LOGERROR("網絡請求失敗: {}", data["error"].get<std::string>());
-            }
-        });
-    // QTranslator translator;
-    //  const QLocale currentLocale = QLocale();
-    // const QLocale currentLocale("zh_CN");
-    //  2. 定义翻译文件的基础名 (与项目名一致)
-    // const QString baseName = QCoreApplication::applicationName();
-
-    // 3. 定义翻译文件在资源系统中的搜索路径
-    // const QString path = ":/i18n/translations/";
-    // if (translator.load(currentLocale, baseName, "_", path)) {
-    //     QCoreApplication::installTranslator(&translator);
-    //     qDebug() << "Successfully loaded translation for" << currentLocale.name();
-    // } else {
-    //     qDebug() << "Could not load translation for" << currentLocale.name();
-    // }
+    // clan::core::NetworkManager::instance().get(
+    //     "https://jsonplaceholder.typicode.com", "/todos/1", [](bool success, const json& data) {
+    //         if (success) {
+    //             LOGINFO("網絡請求成功，獲取標題: {}", data["title"].get<std::string>());
+    //             // 【關鍵】如果要在回調中更新UI，必須使用Qt的機制切回主線程
+    //             // QMetaObject::invokeMethod(...);
+    //         } else {
+    //             LOGERROR("網絡請求失敗: {}", data["error"].get<std::string>());
+    //         }
+    //     });
 
     const QLocale currentLocale = QLocale::system();
     // const QLocale currentLocale("zh_CN");
@@ -253,6 +240,7 @@ int main(int argc, char* argv[]) {
 
     Logger::instance().log("Application starting...");
 
+    // db
     // 1. 确定数据库路径 (存放在 AppData/Local/ClanMemory 下)
     QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QDir dir(dataPath);
@@ -261,14 +249,37 @@ int main(int argc, char* argv[]) {
     QString dbPath = dir.filePath("clan.db");
 
     // 2. 初始化数据库
-    auto& db = qt_app_template::core::DatabaseManager::instance();
+    auto& db = clan::core::DatabaseManager::instance();
     db.Initialize(dbPath.toStdString());
 
-    // 3. 插入一些假数据 (测试用，之后可以注释掉)
-    db.AddDummyMember({"1", "爷爷(根)", "", 1, "", "", ""});
-    db.AddDummyMember({"2", "大伯", "", 2, "1", "", ""});
-    db.AddDummyMember({"3", "我爸", "", 2, "1", "", ""});
-    db.AddDummyMember({"4", "我", "", 3, "3", "", ""});
+    // 3. 插入丰富的产品级数据
+    // 注意：SaveMember 会自动处理更新，所以每次运行都不会重复插入
+    db.SaveMember({.id = "1",
+                   .name = "爷爷(一世)",
+                   .gender = "M",
+                   .generation = 1,
+                   .mate_name = "奶奶",
+                   .birth_date = "1930-01-01",
+                   .birth_place = "福建老家",
+                   .bio = "家族迁徙第一人，勤劳勇敢..."});
+
+    db.SaveMember({.id = "2",
+                   .name = "父亲",
+                   .gender = "M",
+                   .generation = 2,
+                   .father_id = "1",
+                   .mate_name = "母亲",
+                   .birth_date = "1960-05-20",
+                   .bio = "虽然话不多，但..."});
+
+    db.SaveMember({.id = "3",
+                   .name = "我",
+                   .gender = "M",
+                   .generation = 3,
+                   .father_id = "2",
+                   .birth_date = "1990-10-10",
+                   .portrait_path = "/home/karl/Documents/aa.png",  // 之后我们可以换成本地路径
+                   .bio = "这是我的数字记忆。"});
     int result = 0;
     {
         MainWindow w;
@@ -276,6 +287,6 @@ int main(int argc, char* argv[]) {
         Logger::instance().log("Main window shown.");
         result = a.exec();
     }
-    qt_app_template::core::Log::instance().deinit();
+    clan::core::Log::instance().deinit();
     return result;
 }

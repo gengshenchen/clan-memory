@@ -5,7 +5,7 @@
 
 // 使用命名空间来组织常量，避免全局污染
 namespace Constants {
-const QString ORG_NAME = "MyCompany";
-const QString APP_NAME = "qt-app-template";
+const QString ORG_NAME = "dong-xiong-community";
+const QString APP_NAME = "clan-memory";
 }  // namespace Constants
 

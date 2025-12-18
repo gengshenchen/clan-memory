@@ -1,82 +1,113 @@
-import { useState } from 'react';
-import reactLogo from './assets/react.svg';
-// Assuming you have a custom logo or use the vite logo
-import viteLogo from '/vite.svg';
-import './App.css';
+import { useState, useEffect } from "react";
+import {
+  HashRouter as Router,
+  Routes,
+  Route,
+  useNavigate,
+} from "react-router-dom";
+import "./App.css";
+import ClanTree from "./components/ClanTree";
+import MemberDetail from "./pages/MemberDetail";
 
-// // Define a type for the bridge response if needed
-// type BridgeResponse = {
-//   status: string;
-//   data: any;
-// };
+// 1. 定义数据结构
+interface FamilyMember {
+  id: string;
+  name: string;
+  parentId: string;
+  generation: number;
+  mate_name?: string;
+  bio?: string;
+}
 
-function App() {
-  // State to store the response from the Bridge
-  const [bridgeResult, setBridgeResult] = useState<string>('No data received yet.');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+// 2. TypeScript 声明 (原理见下文)
+declare global {
+  interface Window {
+    CallBridge?: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      invoke: (name: string, ...args: any[]) => void;
+    };
+    onFamilyTreeDataReceived?: (data: FamilyMember[]) => void;
+  }
+}
 
-  /**
-   * Function to handle the interaction with your Bridge.
-   * Replace the logic inside with your actual window.bridge or IPC call.
-   */
-  const handleBridgeCall = async () => {
-    setIsLoading(true);
-    setBridgeResult('Calling Bridge...');
+const Home = () => {
+  const [familyData, setFamilyData] = useState<FamilyMember[]>([]);
+  const [isBridgeReady, setIsBridgeReady] = useState<boolean>(false);
+  const [status, setStatus] = useState<string>("等待连接...");
+  const navigate = useNavigate(); // 用于跳转
 
-    try {
-      // TODO: Replace this with your actual Bridge call
-      // Example: const response = await window.myBridge.getData();
+  useEffect(() => {
+    // 轮询检测 Bridge
+    let checkCount = 0;
+    const timer = setInterval(() => {
+      checkCount++;
+      if (window.CallBridge) {
+        setIsBridgeReady(true);
+        setStatus("已连接");
+        clearInterval(timer);
 
-      // Simulating an async operation for UI demonstration
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+        window.onFamilyTreeDataReceived = (data) => {
+          setFamilyData(data);
+          setStatus(`已加载 ${data.length} 人`);
+        };
 
-      const mockResponse = "Success: Connected to Native Backend";
-      setBridgeResult(mockResponse);
-      console.log("Bridge response:", mockResponse);
+        // 自动拉取一次数据
+        window.CallBridge.invoke("fetchFamilyTree", "init");
+      } else if (checkCount > 50) {
+        clearInterval(timer);
+        setStatus("连接超时");
+      }
+    }, 100);
+    return () => clearInterval(timer);
+  }, []);
 
-    } catch (error) {
-      console.error("Bridge error:", error);
-      setBridgeResult(`Error: ${error}`);
-    } finally {
-      setIsLoading(false);
+  // 处理节点点击
+  const handleNodeClick = (id: string) => {
+    // 跳转到详情页
+    navigate(`/member/${id}`);
+  };
+
+  const handleRefresh = () => {
+    if (window.CallBridge) {
+      setStatus("刷新中...");
+      window.CallBridge.invoke("fetchFamilyTree", "manual");
     }
   };
 
   return (
-    <>
-      {/* Logo Section - Uses .logo and .logo:hover from App.css */}
-      <div>
-        <a href="https://vitejs.dev" target="_blank" rel="noreferrer">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank" rel="noreferrer">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-
-      {/* Main Title - Uses h1 from index.css */}
-      <h1>Bridge Interface</h1>
-
-      {/* Card Section - Uses .card from App.css */}
-      <div className="card">
-        {/* Action Button - Uses button styles from index.css (including hover/focus) */}
-        <button onClick={handleBridgeCall} disabled={isLoading}>
-          {isLoading ? 'Processing...' : 'Invoke Native Bridge'}
+    <div className="container">
+      <h1>Clan Memory</h1>
+      {/* 顶部控制栏 */}
+      <div className="card" style={{ padding: "10px", marginBottom: "20px" }}>
+        <button onClick={handleRefresh} disabled={!isBridgeReady}>
+          {isBridgeReady ? "刷新族谱" : "连接核心中..."}
         </button>
-
-        <p>
-          Edit <code>src/App.tsx</code> to wire up your specific C++/Rust functions.
-        </p>
+        <span style={{ marginLeft: "10px", color: "#666" }}>{status}</span>
       </div>
 
-      {/* Result Display Area - Inherits text styles */}
-      <div className="card">
-        <h2>Result:</h2>
-        <p className="read-the-docs">
-          {bridgeResult}
-        </p>
+      <div className="tree-container">
+        {familyData.length > 0 ? (
+          <ClanTree
+            data={familyData}
+            onNodeClick={handleNodeClick} // 传递点击事件
+          />
+        ) : (
+          <p>{status}</p>
+        )}
       </div>
-    </>
+    </div>
+  );
+};
+
+// 主 App 组件只负责路由配置
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/member/:id" element={<MemberDetail />} />
+      </Routes>
+    </Router>
   );
 }
 
