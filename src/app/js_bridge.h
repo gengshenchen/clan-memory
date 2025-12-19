@@ -8,8 +8,9 @@ public:
     explicit JsBridge(QObject* parent = nullptr);
 
 public slots:
-    void test(const QString& message);
-    QString fetchFamilyTree();
-    QString fetchMemberDetail(const QString& id);
-    QString getLocalImage(const QString& filePath);
+    Q_INVOKABLE void test(const QString& message);
+    Q_INVOKABLE QString fetchFamilyTree();
+    Q_INVOKABLE QString fetchMemberDetail(const QString& id);
+    Q_INVOKABLE QString getLocalImage(const QString& filePath);
+    Q_INVOKABLE QString searchMembers(const QString& keyword);
 };

@@ -48,16 +48,16 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowIcon(QIcon(":/icons/app-icon.svg"));
     setFixedWidth(800);
     setFixedHeight(600);
-    setupMenus();
+   // setupMenus();
 
-    QToolBar* toolBar = addToolBar("Main");
-    QPushButton* button = new QPushButton("Call JS", this);
-    toolBar->addWidget(button);
-    connect(button, &QPushButton::clicked, this, [this]() {
-        if (m_cefView) {
-            m_cefView->executeJavascript(QCefView::MainFrameID, "alert('c++ exec js');", "");
-        }
-    });
+    // QToolBar* toolBar = addToolBar("Main");
+    // QPushButton* button = new QPushButton("Call JS", this);
+    // toolBar->addWidget(button);
+    // connect(button, &QPushButton::clicked, this, [this]() {
+    //     if (m_cefView) {
+    //         m_cefView->executeJavascript(QCefView::MainFrameID, "alert('c++ exec js');", "");
+    //     }
+    // });
 
     // setupDocks();
     //printf_resource_runtime();
@@ -224,6 +224,22 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
         if (m_cefView) {
             m_cefView->executeJavascript(frameId, jsCode, "");
             qDebug() << "[C++] Data sent to frontend, length:" << jsonStr.length();
+        }
+    }
+    else if (method == "searchMembers") {
+        if (!arguments.isEmpty()) {
+            QString keyword = arguments.first().toString();
+            // 搜索结果返回的是 JSON 数组字符串，例如 [{"id":"..."}, ...]
+            QString jsonResult = m_jsBridge->searchMembers(keyword);
+
+            // 拼接 JS 回调，同样以对象字面量形式传递
+            QString jsCode = QString(
+                "if(window.onSearchResultsReceived) { window.onSearchResultsReceived(%1); }")
+                .arg(jsonResult);
+
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, jsCode, "");
+            }
         }
     }
     else if (method == "showMemberDetail") {

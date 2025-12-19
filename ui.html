@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clan Memory - Full UI Prototype v2.0 Fixed</title>
+    <style>
+        /* =========================================
+           基础样式与变量定义 (CSS Variables & Base Styles)
+        ========================================= */
+        :root {
+            --bg-dark: #1a1a1a;          /* 全局深色背景 */
+            --bg-panel: #262626;         /* 面板背景 */
+            --text-primary: #e5e5e5;     /* 主要文字颜色 */
+            --text-secondary: #a3a3a3;   /* 次要文字颜色 */
+            --accent-male: #4a90e2;      /* 男性强调色 (蓝) */
+            --accent-female: #e06c75;    /* 女性强调色 (粉) */
+            --gold: #d4af37;             /* 核心强调色 (金) */
+            --admin-color: #e67e22;      /* 管理员模式强调色 (橙) */
+            --overlay-bg: rgba(0, 0, 0, 0.95); /* 遮罩层背景 */
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            overflow: hidden; /* 防止页面整体滚动 */
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* =========================================
+           1. 顶部导航栏 (Top Bar)
+        ========================================= */
+        .top-bar {
+            height: 60px;
+            background-color: #121212;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            z-index: 10;
+            transition: background-color 0.3s, border-bottom 0.3s;
+        }
+        /* 管理员模式下的顶栏样式变化 */
+        body.admin-mode .top-bar {
+            background-color: #2c1a0a;
+            border-bottom: 2px solid var(--admin-color);
+        }
+
+        .logo {
+            font-size: 20px; font-weight: bold; color: var(--gold); display: flex; align-items: center; gap: 10px;
+        }
+        /* 管理员标识徽章 (默认隐藏) */
+        .admin-badge {
+            display: none; background: var(--admin-color); font-size: 12px; padding: 3px 8px; border-radius: 12px; color: white; margin-left: 10px;
+        }
+        body.admin-mode .admin-badge { display: inline-block; }
+
+        .search-container { position: relative; width: 400px; }
+        .search-input {
+            width: 100%; padding: 12px 20px; border-radius: 24px; border: 1px solid #333;
+            background-color: #2c2c2c; color: white; font-size: 16px; outline: none; transition: all 0.3s;
+        }
+        .search-input:focus { border-color: var(--gold); background-color: #333; box-shadow: 0 0 8px rgba(212, 175, 55, 0.3); }
+
+        /* 设置/登录按钮 */
+        .settings-btn {
+            width: 40px; height: 40px; background: #333; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; font-size: 20px;
+        }
+        .settings-btn:hover { background: #444; color: var(--gold); transform: rotate(30deg); }
+        body.admin-mode .settings-btn:hover { color: var(--admin-color); transform: none; }
+
+        /* =========================================
+           2. 主画布与家谱树 (Main Canvas & Tree)
+        ========================================= */
+        .main-canvas {
+            flex: 1; position: relative; background-image: radial-gradient(#333 1px, transparent 1px);
+            background-size: 40px 40px; overflow: hidden; cursor: grab;
+        }
+        .main-canvas:active { cursor: grabbing; }
+
+        /* 节点样式 */
+        .tree-node {
+            position: absolute; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 2;
+        }
+        .tree-node:hover { transform: scale(1.1); z-index: 5; }
+
+        .node-avatar {
+            width: 80px; height: 80px; border-radius: 50%; background-color: #555; border: 3px solid #777; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: all 0.3s;
+        }
+        .node-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* 性别与状态区分 */
+        .node-male .node-avatar { border-radius: 12px; border-color: var(--accent-male); }
+        .node-female .node-avatar { border-radius: 50%; border-color: var(--accent-female); }
+        .node-deceased .node-avatar { filter: grayscale(0.8) contrast(0.8); border-color: #666; }
+        .node-name { margin-top: 8px; background: rgba(0,0,0,0.7); padding: 4px 12px; border-radius: 12px; font-size: 14px; text-align: center; backdrop-filter: blur(4px); }
+
+        /* 选中高亮状态 (演示用) */
+        .tree-node.active .node-avatar {
+             border-color: var(--gold); box-shadow: 0 0 25px rgba(212,175,55,0.6); transform: scale(1.05); filter: none;
+        }
+        .tree-node.active .node-name { color: var(--gold); font-weight: bold; }
+
+        /* 连接线 (模拟) */
+        .connector { position: absolute; background: #555; height: 2px; z-index: 1; }
+
+        /* 底部提示 */
+        .hint-bar {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 15px; pointer-events: none; z-index: 10;
+        }
+        .hint-pill {
+            background: rgba(0,0,0,0.6); border: 1px solid #444; padding: 8px 16px; border-radius: 20px; font-size: 14px; color: #ccc; backdrop-filter: blur(4px);
+        }
+        .hint-highlight { border-color: var(--gold); color: var(--gold); }
+
+        /* =========================================
+           3. 侧边详情面板 (Side Panel - Viewer Mode)
+        ========================================= */
+        .side-panel {
+            position: fixed; top: 60px; right: -480px; width: 480px; height: calc(100vh - 60px);
+            background-color: var(--bg-panel); box-shadow: -5px 0 30px rgba(0,0,0,0.7);
+            transition: right 0.4s cubic-bezier(0.23, 1, 0.32, 1); padding: 30px; box-sizing: border-box;
+            overflow-y: auto; z-index: 20; border-left: 1px solid #333;
+        }
+        .side-panel.active { right: 0; }
+
+        .panel-close {
+            position: absolute; top: 20px; right: 20px; background: none; border: none;
+            color: #777; font-size: 28px; cursor: pointer; transition: color 0.2s;
+        }
+        .panel-close:hover { color: white; }
+
+        .profile-header { text-align: center; margin-bottom: 30px; }
+        .profile-img-lg {
+            width: 140px; height: 140px; border-radius: 50%; border: 4px solid var(--gold);
+            margin: 0 auto 20px; background-color: #444; overflow: hidden; box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+        }
+        .profile-img-lg img { width: 100%; height: 100%; object-fit: cover; }
+        .profile-name { font-size: 32px; margin: 0; color: var(--gold); font-weight: bold; }
+        .profile-generation { font-size: 18px; color: var(--text-primary); margin-top: 8px; }
+
+        /* 详细信息列表 (基于 struct 字段) */
+        .info-list { margin-bottom: 30px; background: rgba(0,0,0,0.3); border-radius: 16px; padding: 20px; border: 1px solid #333; }
+        .info-item { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .info-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .info-label { color: var(--text-secondary); }
+        .info-value { color: var(--text-primary); font-weight: 500; text-align: right; }
+
+        /* 媒体操作按钮网格 */
+        .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; }
+        .action-btn {
+            background: #333; border: 1px solid #444; color: white; padding: 18px 10px;
+            border-radius: 16px; cursor: pointer; display: flex; flex-direction: column;
+            align-items: center; gap: 10px; transition: all 0.2s; font-size: 14px;
+        }
+        .action-btn:hover { background: #444; border-color: var(--gold); transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .action-btn i { font-size: 24px; }
+        .btn-cinema { grid-column: span 2; background: linear-gradient(135deg, #3a2c10, #1a1a1a); border: 1px solid var(--gold); }
+        .btn-cinema i { color: var(--gold); }
+
+        /* 生平摘要 */
+        .bio-summary { background: rgba(0,0,0,0.3); padding: 20px; border-radius: 16px; line-height: 1.7; font-size: 15px; color: #ccc; border: 1px solid #333; }
+        .read-more-link {
+            color: var(--gold); text-decoration: none; display: flex; align-items: center; gap: 5px;
+            margin-top: 15px; cursor: pointer; font-weight: bold; transition: gap 0.2s;
+        }
+        .read-more-link:hover { gap: 10px; }
+
+        /* =========================================
+           4. 通用全屏媒体遮罩层 (Media Overlay - v1.5功能)
+        ========================================= */
+        .media-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black;
+            z-index: 100; display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.5s;
+            flex-direction: column;
+        }
+        .media-overlay.active { opacity: 1; pointer-events: all; }
+        .media-close {
+            position: absolute; top: 30px; left: 30px; color: white; font-size: 18px;
+            cursor: pointer; background: rgba(255,255,255,0.1); padding: 10px 20px;
+            border-radius: 30px; border: 1px solid rgba(255,255,255,0.2); z-index: 101;
+        }
+        .media-container { display: none; width: 100%; height: 100%; justify-content: center; align-items: center; flex-direction: column; }
+        .media-container.active { display: flex; }
+
+        /* [视频模式样式] */
+        .video-placeholder { width: 80%; height: 70%; background: #111; border: 1px solid #333; display: flex; justify-content: center; align-items: center; color: #555; position: relative; }
+        .media-controls-bottom { position: absolute; bottom: 0; left: 0; width: 100%; height: 80px; background: linear-gradient(transparent, rgba(0,0,0,0.8)); display: flex; align-items: center; justify-content: center; gap: 20px; }
+        .control-btn { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.2); border: none; color: white; cursor: pointer; font-size: 20px; }
+
+        /* [照片画廊模式样式] */
+        .photo-stage { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; padding: 60px 0; box-sizing: border-box; }
+        .main-photo { max-height: 100%; max-width: 80%; border: 2px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .photo-nav-btn { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; padding: 20px; font-size: 30px; cursor: pointer; }
+        .nav-left { left: 20px; } .nav-right { right: 20px; }
+        .photo-thumbnails { height: 100px; background: rgba(255,255,255,0.1); width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px; }
+        .thumb { width: 60px; height: 60px; border: 2px solid transparent; opacity: 0.5; cursor: pointer; }
+        .thumb.active { border-color: var(--gold); opacity: 1; }
+
+        /* [音频播放模式样式] */
+        .audio-stage { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60%; }
+        .audio-portrait { width: 200px; height: 200px; border-radius: 50%; border: 5px solid #333; overflow: hidden; margin-bottom: 30px; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
+        .sound-wave-container { display: flex; gap: 5px; height: 60px; align-items: center; }
+        .wave-bar { width: 6px; background: var(--gold); border-radius: 3px; animation: wave 1s ease-in-out infinite; }
+        @keyframes wave { 0%, 100% { height: 10px; } 50% { height: 50px; } }
+        .wave-bar:nth-child(2) { animation-delay: 0.1s; } .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.3s; } .wave-bar:nth-child(5) { animation-delay: 0.4s; }
+
+        /* =========================================
+           5. 完整传记覆盖层 (Full Bio Overlay - v2.0功能)
+        ========================================= */
+        .full-bio-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-dark);
+            z-index: 150; transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            display: flex; flex-direction: column;
+        }
+        .full-bio-overlay.active { transform: translateY(0); }
+        .bio-header {
+            height: 60px; display: flex; align-items: center; padding: 0 30px; flex-shrink: 0;
+            border-bottom: 1px solid #333; background: #121212;
+        }
+        .back-btn { background: none; border: none; color: var(--gold); font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: bold;}
+        .bio-content-scroll { flex: 1; overflow-y: auto; padding: 60px 40px; display: flex; justify-content: center; }
+        .bio-article { max-width: 800px; }
+        .bio-article h1 { color: var(--gold); font-size: 42px; margin-bottom: 15px; font-family: 'serif'; text-align: center;}
+        .bio-article-meta { color: var(--text-secondary); margin-bottom: 50px; font-style: italic; text-align: center; font-size: 18px;}
+        .bio-body { font-size: 20px; line-height: 1.9; color: #d4d4d4; font-family: 'Georgia', 'Times New Roman', serif; }
+        .bio-body p { margin-bottom: 30px; text-indent: 2em; }
+        .bio-body p.no-indent { text-indent: 0; text-align: center; color: #666; margin-top: 60px; }
+
+        /* =========================================
+           6. 管理员登录模态框 (Login Modal - v2.0功能)
+        ========================================= */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 200; display: flex;
+            justify-content: center; align-items: center; backdrop-filter: blur(5px);
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        .modal-box {
+            background: var(--bg-panel); width: 380px; padding: 40px; border-radius: 20px;
+            border: 1px solid #444; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .modal-overlay.active .modal-box { transform: scale(1); }
+        .modal-title { margin-top: 0; color: var(--gold); font-size: 24px; }
+        .modal-input {
+            width: 90%; padding: 15px; margin: 25px 0; background: #333; border: 2px solid #555;
+            color: white; font-size: 18px; text-align: center; border-radius: 12px; outline: none; transition: border-color 0.3s;
+        }
+        .modal-input:focus { border-color: var(--gold); }
+        .modal-actions { display: flex; gap: 15px; justify-content: center; }
+        .btn { padding: 12px 30px; border-radius: 12px; cursor: pointer; font-size: 16px; border: none; font-weight: bold; transition: all 0.2s; }
+        .btn-primary { background: var(--gold); color: #1a1a1a; }
+        .btn-primary:hover { background: #eac34d; }
+        .btn-secondary { background: #444; color: #ccc; }
+        .btn-secondary:hover { background: #555; color: white; }
+
+        /* =========================================
+           7. 档案编辑台 (Admin Dashboard Panel - v2.0功能)
+        ========================================= */
+        .admin-dashboard {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 360px;
+            background: #1a1a1a; border-top: 4px solid var(--admin-color);
+            z-index: 180; transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            display: flex; flex-direction: column; box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
+        }
+        /* 仅在管理模式下激活时显示 */
+        body.admin-mode .admin-dashboard.active { transform: translateY(0); }
+
+        .dashboard-header {
+            height: 60px; background: #222; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; border-bottom: 1px solid #333; flex-shrink: 0;
+        }
+        .dashboard-title { font-weight: bold; color: var(--admin-color); font-size: 18px; display: flex; align-items: center; gap: 10px; }
+        .close-dashboard-btn { background: none; border: none; color: #777; cursor: pointer; font-size: 24px; transition: color 0.2s;}
+        .close-dashboard-btn:hover { color: white; }
+
+        .dashboard-content { flex: 1; padding: 40px; display: flex; gap: 50px; justify-content: center; align-items: flex-start; overflow-y: auto; }
+
+        .dash-section { background: rgba(255,255,255,0.03); padding: 25px; border-radius: 16px; width: 220px; text-align: center; border: 1px solid #333; }
+        .dash-section h4 { color: #ccc; margin-top: 0; margin-bottom: 25px; border-bottom: 2px solid #333; padding-bottom: 15px; font-size: 16px;}
+
+        .dash-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 12px;
+            background: #333; border: 1px solid #444; color: white; padding: 18px; width: 100%;
+            border-radius: 12px; cursor: pointer; transition: all 0.2s; margin-bottom: 15px; font-size: 14px;
+        }
+        .dash-btn:hover { background: var(--admin-color); border-color: var(--admin-color); color: white; transform: translateY(-3px); }
+        .dash-btn-icon { font-size: 28px; }
+
+        /* 上传区域特殊样式 */
+        .upload-dropzone {
+            height: 120px; justify-content: center; border: 2px dashed #555; background: rgba(0,0,0,0.2); color: #888;
+        }
+        .upload-dropzone:hover { border-color: var(--admin-color); color: var(--admin-color); background: rgba(230, 126, 34, 0.1); }
+
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div class="logo">
+            <span style="font-size: 24px;">🏛️</span> 宗族记忆
+            <span class="admin-badge">管理员模式</span>
+        </div>
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="🔍 搜索姓名、字号或 '抗战' 等关键词...">
+        </div>
+        <div class="settings-btn" id="settingBtn" onclick="handleSettingClick()" title="设置 / 管理员登录">⚙️</div>
+    </div>
+
+    <div class="main-canvas" id="canvas">
+        <div class="connector" style="width: 2px; height: 150px; top: 180px; left: 50%;"></div>
+        <div class="connector" style="width: 300px; height: 2px; top: 330px; left: calc(50% - 150px);"></div>
+        <div class="connector" style="width: 2px; height: 50px; top: 330px; left: calc(50% - 150px);"></div>
+        <div class="connector" style="width: 2px; height: 50px; top: 330px; left: calc(50% + 150px);"></div>
+
+        <div class="tree-node node-deceased node-male" style="top: 100px; left: calc(50% - 40px);" onclick="openPanel('陈宗源')">
+            <div class="node-avatar"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4" alt=""></div>
+            <div class="node-name">陈宗源 (12世)</div>
+        </div>
+
+        <div class="tree-node node-deceased node-female" style="top: 380px; left: calc(50% - 190px);" onclick="openPanel('陈秀英')">
+             <div class="node-avatar"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Annie&backgroundColor=ffdfbf" alt=""></div>
+            <div class="node-name">陈秀英 (13世)</div>
+        </div>
+
+        <div class="tree-node node-male active" style="top: 380px; left: calc(50% + 110px);" onclick="openPanel('陈建国')">
+             <div class="node-avatar"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jack&backgroundColor=c0aede" alt=""></div>
+            <div class="node-name">陈建国 (13世)</div>
+        </div>
+
+        <div class="hint-bar">
+            <div class="hint-pill hint-highlight">👆 点击高亮的 "陈建国" 节点查看详情</div>
+            <div class="hint-pill">↗️ 点击右上角齿轮体验管理员登录</div>
+        </div>
+    </div>
+
+    <div class="side-panel" id="sidePanel">
+        <button class="panel-close" onclick="closePanel()">✕</button>
+
+        <div class="profile-header">
+            <div class="profile-img-lg"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jack&backgroundColor=c0aede" id="panelImg" alt="Profile"></div>
+            <h2 class="profile-name" id="panelName">陈建国</h2>
+            <div class="profile-generation">第13世 · "建"字辈</div>
+        </div>
+
+        <div class="info-list">
+            <div class="info-item">
+                <span class="info-label">性别 (Gender)</span><span class="info-value">男</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">配偶 (Spouse)</span><span class="info-value">张桂兰</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">出生 (Born)</span><span class="info-value">1952-03-15 (江苏无锡)</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">健在 (Living)</span><span class="info-value">现居上海市徐汇区</span>
+            </div>
+        </div>
+
+        <div class="action-grid">
+            <div class="action-btn btn-cinema" onclick="openMedia('video')">
+                <i>🎥</i><span>观看生前影像</span>
+            </div>
+            <div class="action-btn" onclick="openMedia('photo')">
+                <i>📷</i><span>老照片 (12)</span>
+            </div>
+            <div class="action-btn" onclick="openMedia('audio')">
+                <i>🎙️</i><span>录音片段</span>
+            </div>
+        </div>
+
+        <div class="bio-summary">
+            <h3 style="margin-top:0; color:white; border-bottom: 1px solid #444; padding-bottom: 10px;">生平摘要</h3>
+            <p>陈建国，1952年春生于无锡老宅。少年时勤勉好学，颇受祖父熏陶，略通经史。1970年响应国家号召，奔赴苏北盐城插队落户，期间磨砺了坚韧的心志。1977年恢复高考后，以优异成绩考入上海师范学院中文系...</p>
+            <div class="read-more-link" onclick="openFullBio()">
+                <span>阅读完整传记</span>
+                <span style="font-size: 18px;">→</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="media-overlay" id="mediaOverlay">
+        <button class="media-close" onclick="closeMedia()">← 返回 (Back)</button>
+
+        <div class="media-container" id="videoContainer">
+            <div class="video-placeholder">
+                [ 模拟视频播放区域 ]<br><span style="font-size: 50px; margin-top: 20px;">▶️</span>
+                <div class="media-controls-bottom">
+                    <button class="control-btn">⏮</button>
+                    <button class="control-btn" style="width: 70px; height: 70px; font-size: 24px;">❚❚</button>
+                    <button class="control-btn">⏭</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="media-container" id="photoContainer">
+            <button class="photo-nav-btn nav-left">‹</button>
+            <div class="photo-stage">
+                <img src="https://picsum.photos/id/1025/800/600" class="main-photo" alt="Old Photo">
+            </div>
+            <button class="photo-nav-btn nav-right">›</button>
+            <div class="photo-thumbnails">
+                <img src="https://picsum.photos/id/1025/60/60" class="thumb active">
+                <img src="https://picsum.photos/id/1062/60/60" class="thumb">
+                <img src="https://picsum.photos/id/1074/60/60" class="thumb">
+            </div>
+        </div>
+
+        <div class="media-container" id="audioContainer">
+            <div class="audio-stage">
+                <div class="audio-portrait">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jack&backgroundColor=c0aede" style="width:100%; height:100%; object-fit:cover;">
+                </div>
+                <h3 style="color: var(--gold); margin-bottom: 20px;">正在播放：80岁自述录音.mp3</h3>
+                <div class="sound-wave-container">
+                    <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+                    <div class="wave-bar"></div><div class="wave-bar"></div>
+                </div>
+            </div>
+            <div class="media-controls-bottom" style="background: none; position: relative;">
+                <button class="control-btn">⏮</button>
+                <button class="control-btn" style="width: 70px; height: 70px; font-size: 24px;">▶</button>
+                <button class="control-btn">⏭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="full-bio-overlay" id="fullBioOverlay">
+        <div class="bio-header">
+            <button class="back-btn" onclick="closeFullBio()">← 返回概览 (Back)</button>
+        </div>
+        <div class="bio-content-scroll">
+            <article class="bio-article">
+                <h1>陈建国先生生平传略</h1>
+                <div class="bio-article-meta">第13世 · "建"字辈 | 1952 - 至今</div>
+                <div class="bio-body">
+                    <p>陈建国，1952年春生于无锡老宅。少年时勤勉好学，颇受祖父熏陶，略通经史。1970年，响应国家号召，奔赴苏北盐城插队落户，期间与当地乡民同甘共苦，磨砺了坚韧的心志，这段经历成为他人生宝贵的财富。</p>
+                    <p>1977年恢复高考，陈建国在极其艰苦的条件下复习备考，白日劳动，夜间挑灯夜读，最终以优异成绩考入上海师范学院中文系。大学期间，他如饥似渴地汲取知识，尤其对古文字学及先秦文学产生了浓厚兴趣，受教于多位学界泰斗。</p>
+                    <p>毕业后，陈建国分配至上海市某重点中学任教，毕生耕耘于中学语文教育一线。他治学严谨，教学风格如春风化雨，注重培养学生的独立思考能力与人文素养，深受学生爱戴。1985年被评为市级优秀教师，其撰写的《中学古诗文教学刍议》、《论<史记>的人物刻画艺术在教学中的应用》等多篇论文在核心期刊发表，在业内颇具影响。</p>
+                    <p>1980年与张桂兰女士结为连理，夫妻二人相濡以沫，育有一子一女，皆学有所成。晚年退休后，陈建国致力于家族史料的整理与修订，不辞辛劳奔波各地搜集资料，为《陈氏宗谱》的数字化工作做出了重要贡献，实现了家族记忆的现代化传承。</p>
+                    <p>现居上海，含饴弄孙，平日喜好书法与园艺，安享晚年。</p>
+                    <p class="no-indent">--- 全文完 ---</p>
+                </div>
+            </article>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal-box">
+            <h2 class="modal-title">管理员身份验证</h2>
+            <p style="color: #ccc; margin-bottom: 30px;">请输入密码以访问档案编辑台</p>
+            <input type="password" class="modal-input" id="adminPassword" placeholder="请输入密码 (演示: admin)">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeLoginModal()">取消</button>
+                <button class="btn btn-primary" onclick="attemptLogin()">验证登录</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="admin-dashboard" id="adminDashboard">
+        <div class="dashboard-header">
+            <div class="dashboard-title">
+                <span style="font-size: 24px;">🛠️</span> 档案编辑台 (Editor Workbench)
+            </div>
+            <button class="close-dashboard-btn" onclick="toggleDashboard(false)" title="隐藏面板 (保持登录状态)">✕</button>
+        </div>
+        <div class="dashboard-content">
+            <div class="dash-section">
+                <h4>👤 人员节点管理</h4>
+                <button class="dash-btn" onclick="alert('演示功能：弹出【新增成员】表单模态框，录入姓名、性别、父母关系等基础信息。')">
+                    <span class="dash-btn-icon">➕</span>
+                    <span>新增成员节点</span>
+                </button>
+                <button class="dash-btn" onclick="alert('演示功能：进入【编辑模式】。此时点击画布上的节点，将不再打开详情页，而是弹出该节点的编辑表单。')">
+                    <span class="dash-btn-icon">✏️</span>
+                    <span>编辑模式 (已选中: 陈建国)</span>
+                </button>
+            </div>
+             <div class="dash-section">
+                <h4>☁️ 媒体资源托管</h4>
+                 <button class="dash-btn upload-dropzone" onclick="alert('演示功能：打开文件选择器，支持多选照片/视频。上传后系统将计算 Hash 并自动去重存入 /resources/media 目录。')">
+                    <span class="dash-btn-icon">📂</span>
+                    <span>点击或拖拽文件至此<br>(自动去重上传)</span>
+                </button>
+            </div>
+            <div class="dash-section">
+                <h4>💾 数据维护</h4>
+                <button class="dash-btn" onclick="alert('演示功能：将当前 SQLite 数据库和媒体文件夹打包为 ZIP 下载到本地。')">
+                    <span class="dash-btn-icon">📥</span>
+                    <span>完整全量备份 (Export)</span>
+                </button>
+                 <button class="dash-btn" onclick="alert('演示功能：上传 CSV 文件，执行 Python 脚本批量导入初始化数据。')">
+                    <span class="dash-btn-icon">📄</span>
+                    <span>CSV 批量导入</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =========================================
+        // 全局状态与交互逻辑
+        // =========================================
+        let isAdminMode = false; // 当前是否处于管理员模式
+
+        // --- 访客模式交互 (Viewer Mode Interactions) ---
+
+        // 1. 打开侧边栏详情
+        function openPanel(name) {
+            // 如果在管理模式下且面板已打开，先不要重复打开，避免冲突
+            if (isAdminMode && document.getElementById('adminDashboard').classList.contains('active')) {
+                 return;
+            }
+            document.getElementById('panelName').innerText = name;
+            document.getElementById('sidePanel').classList.add('active');
+        }
+
+        // 2. 关闭侧边栏
+        function closePanel() {
+            document.getElementById('sidePanel').classList.remove('active');
+        }
+
+        // 3. 打开媒体遮罩层 (视频/照片/音频)
+        function openMedia(type) {
+            const overlay = document.getElementById('mediaOverlay');
+            // 先隐藏所有容器
+            document.querySelectorAll('.media-container').forEach(el => el.classList.remove('active'));
+            // 根据类型显示对应的容器
+            if (type === 'video') document.getElementById('videoContainer').classList.add('active');
+            else if (type === 'photo') document.getElementById('photoContainer').classList.add('active');
+            else if (type === 'audio') document.getElementById('audioContainer').classList.add('active');
+            // 显示遮罩层
+            overlay.classList.add('active');
+        }
+
+        // 4. 关闭媒体遮罩层
+        function closeMedia() {
+            document.getElementById('mediaOverlay').classList.remove('active');
+        }
+
+        // 5. 打开完整传记页面
+        function openFullBio() {
+            document.getElementById('fullBioOverlay').classList.add('active');
+        }
+
+        // 6. 关闭完整传记页面
+        function closeFullBio() {
+            document.getElementById('fullBioOverlay').classList.remove('active');
+        }
+
+
+        // --- 管理员模式交互 (Admin Mode Interactions) ---
+
+        // 1. 处理设置按钮点击事件 (入口)
+        function handleSettingClick() {
+            if (isAdminMode) {
+                // 如果已经是管理员，点击则询问是否退出
+                if(confirm("确定要退出管理员模式吗？")) {
+                    exitAdminMode();
+                }
+            } else {
+                // 如果不是管理员，弹出登录框
+                openLoginModal();
+            }
+        }
+
+        // 2. 打开登录模态框
+        function openLoginModal() {
+            document.getElementById('loginModal').classList.add('active');
+            const pwdInput = document.getElementById('adminPassword');
+            pwdInput.value = ''; // 清空之前的输入
+            setTimeout(() => pwdInput.focus(), 100); // 自动聚焦
+        }
+
+        // 3. 关闭登录模态框
+        function closeLoginModal() {
+            document.getElementById('loginModal').classList.remove('active');
+        }
+
+        // 4. 执行登录验证
+        function attemptLogin() {
+            const pwd = document.getElementById('adminPassword').value;
+            // 【演示验证】
+            if (pwd === 'admin') {
+                enterAdminMode();
+            } else {
+                alert('❌ 密码错误，请重试。\n(提示：演示密码为 admin)');
+                document.getElementById('adminPassword').select();
+            }
+        }
+        // 支持回车键登录
+        document.getElementById('adminPassword').addEventListener('keypress', function(e) {
+            if(e.key === 'Enter') attemptLogin();
+        });
+
+        // 5. 进入管理员模式的核心逻辑
+        function enterAdminMode() {
+            isAdminMode = true;
+            closeLoginModal();
+            // 改变 Body 类名，触发顶栏等全局样式的变化
+            document.body.classList.add('admin-mode');
+            // 改变设置按钮图标为退出隐喻图标
+            document.getElementById('settingBtn').innerHTML = '🚪';
+            document.getElementById('settingBtn').title = "退出管理员模式";
+            // 弹出编辑台面板
+            toggleDashboard(true);
+            // 关闭可能打开的侧边栏，避免遮挡
+            closePanel();
+        }
+
+        // 6. 退出管理员模式
+        function exitAdminMode() {
+            isAdminMode = false;
+            document.body.classList.remove('admin-mode');
+            document.getElementById('settingBtn').innerHTML = '⚙️';
+            document.getElementById('settingBtn').title = "设置 / 管理员登录";
+            toggleDashboard(false);
+        }
+
+        // 7. 切换编辑台面板的显示/隐藏
+        function toggleDashboard(show) {
+            const dashboard = document.getElementById('adminDashboard');
+            if (show) {
+                dashboard.classList.add('active');
+            } else {
+                dashboard.classList.remove('active');
+            }
+        }
+
+        // --- 基础功能：主画布拖拽模拟 ---
+        const canvas = document.getElementById('canvas');
+        let isDown = false; let startX;
+
+        canvas.addEventListener('mousedown', (e) => {
+            // 如果点击的是节点本身，不触发拖拽
+            if(e.target.closest('.tree-node')) return;
+            isDown = true;
+            canvas.classList.add('active');
+            startX = e.pageX - canvas.offsetLeft;
+        });
+        canvas.addEventListener('mouseleave', () => { isDown = false; canvas.classList.remove('active'); });
+        canvas.addEventListener('mouseup', () => { isDown = false; canvas.classList.remove('active'); });
+        canvas.addEventListener('mousemove', (e) => {
+            if(!isDown) return;
+            e.preventDefault();
+            // 仅演示拖拽手势，未实现真实滚动位移
+        });
+    </script>
+</body>
+</html>

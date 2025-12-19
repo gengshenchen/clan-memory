@@ -254,32 +254,91 @@ int main(int argc, char* argv[]) {
 
     // 3. 插入丰富的产品级数据
     // 注意：SaveMember 会自动处理更新，所以每次运行都不会重复插入
+
+    // --- 第一代 ---
     db.SaveMember({.id = "1",
                    .name = "爷爷(一世)",
                    .gender = "M",
                    .generation = 1,
+                   .generation_name = "始",
+                   .father_id = "",
+                   .mother_id = "",
                    .mate_name = "奶奶",
                    .birth_date = "1930-01-01",
+                   .death_date = "2005-08-15",
                    .birth_place = "福建老家",
-                   .bio = "家族迁徙第一人，勤劳勇敢..."});
+                   .death_place = "台湾台北",
+                   .portrait_path = "",  // 暂空
+                   .bio = "# 家族始祖\n\n家族迁徙第一人，勤劳勇敢。曾参与修建当地妈祖庙。"});
 
+    // --- 第二代 ---
     db.SaveMember({.id = "2",
                    .name = "父亲",
                    .gender = "M",
                    .generation = 2,
+                   .generation_name = "定",
                    .father_id = "1",
+                   .mother_id = "",
                    .mate_name = "母亲",
                    .birth_date = "1960-05-20",
-                   .bio = "虽然话不多，但..."});
+                   .death_date = "",
+                   .birth_place = "台湾台北",
+                   .death_place = "",
+                   .portrait_path = "",
+                   .bio = "虽然话不多，但是家里的顶梁柱。"});
 
+    // --- 第三代 (我) ---
     db.SaveMember({.id = "3",
                    .name = "我",
                    .gender = "M",
                    .generation = 3,
+                   .generation_name = "英",
                    .father_id = "2",
+                   .mother_id = "",
+                   .mate_name = "妻子",
                    .birth_date = "1990-10-10",
-                   .portrait_path = "/home/karl/Documents/aa.png",  // 之后我们可以换成本地路径
-                   .bio = "这是我的数字记忆。"});
+                   .death_date = "",
+                   .birth_place = "台湾台北",
+                   .death_place = "",
+                   .portrait_path =
+                       "/home/karl/Documents/aa.png",  // 这里的路径可以填你本地真实的绝对路径测试
+                   .bio = "这是我的数字记忆。热爱编程与生活。"});
+
+    // --- 第三代 (姐姐) ---
+    db.SaveMember({.id = "4",
+                   .name = "姐姐",
+                   .gender = "F",
+                   .generation = 3,
+                   .generation_name = "英",
+                   .father_id = "2",
+                   .mother_id = "",
+                   .mate_name = "姐夫",
+                   .birth_date = "1988-06-06",
+                   .death_date = "",
+                   .birth_place = "台湾台北",
+                   .death_place = "",
+                   .portrait_path = "",
+                   .bio = "性格开朗，喜欢旅行。"});
+
+    Logger::instance().log("=== Testing FTS5 Search ===");
+
+    // 测试 1: 搜索 Bio 里的关键词 "妈祖" (存在于爷爷的生平)
+    auto results = db.SearchMembers("妈祖");
+    if (results.empty()) {
+        LOGINFO("[FAIL] Search '妈祖' returned 0 results. FTS might be broken.");
+    } else {
+        LOGINFO("[SUCCESS] Search '妈祖' found " + std::to_string(results.size()) +
+                               " member(s):");
+        for (const auto& m : results) {
+            LOGINFO("  -> " + m.name + " (" + m.bio.substr(0, 20) + "...)");
+        }
+    }
+
+    // 测试 2: 搜索 "顶梁柱" (存在于父亲的生平)
+    results = db.SearchMembers("顶梁柱");
+    if (!results.empty()) {
+        LOGINFO("[SUCCESS] Search '顶梁柱' found: " + results[0].name);
+    }
     int result = 0;
     {
         MainWindow w;

@@ -83,6 +83,7 @@ option(SQLITECPP_RUN_CPPLINT "Run cpplint.py tool" OFF)
 option(SQLITECPP_BUILD_TESTS "Build and run tests" OFF)
 option(SQLITECPP_BUILD_EXAMPLES "Build examples" OFF)
 option(SQLITECPP_INTERNAL_SQLITE "Add the internal SQLite3 source to the project" ON)
+add_compile_definitions(SQLITE_ENABLE_FTS5)
 add_subdirectory(3rdparty/SQLiteCpp)
 
 add_subdirectory(src/shared)
