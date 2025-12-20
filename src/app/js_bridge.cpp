@@ -38,7 +38,7 @@ QString JsBridge::fetchFamilyTree() {
         jobj["generationName"] = QString::fromStdString(m.generation_name);
 
         // 列表页需要的概要信息
-        jobj["mateName"] = QString::fromStdString(m.mate_name);
+        jobj["mateName"] = QString::fromStdString(m.spouse_name);
         jobj["gender"] = QString::fromStdString(m.gender);
 
         // 【新增】简要生卒年，方便树上显示 (如 "1920-2010")
@@ -77,7 +77,7 @@ QString JsBridge::fetchMemberDetail(const QString& id) {
     // --- 亲属关系 ---
     jobj["parentId"] = QString::fromStdString(m.father_id);
     jobj["motherId"] = QString::fromStdString(m.mother_id); // 新增
-    jobj["mateName"] = QString::fromStdString(m.mate_name);
+    jobj["mateName"] = QString::fromStdString(m.spouse_name);
 
     // --- 时空信息 (新增) ---
     jobj["birthDate"] = QString::fromStdString(m.birth_date);

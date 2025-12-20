@@ -148,7 +148,7 @@ const MemberDetail: React.FC = () => {
             <div style={{ marginTop: '12px', display: 'flex', gap: '10px', fontSize: '1.1rem', opacity: 0.9 }}>
               <Badge text={`第 ${member.generation} 世`} />
               <Badge text={member.gender === 'F' ? '女性' : '男性'} />
-              {member.mateName && <Badge text={`配偶: ${member.mateName}`} />}
+              {member.spouseName && <Badge text={`配偶: ${member.spouseName}`} />}
             </div>
           </div>
         </div>
@@ -169,7 +169,7 @@ const MemberDetail: React.FC = () => {
           <InfoPanel title="🌳 家族血脉">
             <InfoRow label="父亲" value={displayValue(member.parentId)} isId />
             <InfoRow label="母亲" value={displayValue(member.motherId)} isId />
-            <InfoRow label="配偶" value={displayValue(member.mateName)} />
+            <InfoRow label="配偶" value={displayValue(member.spouseName)} />
             <div style={{ marginTop: '20px', padding: '10px', background: '#eff6ff', borderRadius: '8px', fontSize: '0.9rem', color: '#1e40af' }}>
                 💡 提示：点击 ID 可直接跳转（开发中）
             </div>

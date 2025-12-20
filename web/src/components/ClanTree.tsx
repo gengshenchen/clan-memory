@@ -1,21 +1,17 @@
-import React, { useEffect, useRef } from "react";
-import * as d3 from "d3";
+import React, { useEffect, useRef } from 'react';
+import * as d3 from 'd3';
 
-// Enhanced interface matching C++ JsBridge output
 export interface FamilyMember {
   id: string;
   name: string;
-  parentId: string; // Maps to father_id
-  generation: number;
-
-  // New fields from Database
-  generationName?: string; // e.g., "定", "英"
   gender?: string;
-  mateName?: string;
-  lifeSpan?: string;       // e.g., "1930-2005"
+  generation: number;
+  generationName: string;
 
-  // Detail fields (optional here, used in Detail page)
-  motherId?: string;
+  parentId: string;
+  motherId: string;
+  spouseName: string;
+
   birthDate?: string;
   deathDate?: string;
   birthPlace?: string;
@@ -35,169 +31,119 @@ const ClanTree: React.FC<ClanTreeProps> = ({ data, onNodeClick }) => {
   useEffect(() => {
     if (!data || data.length === 0 || !svgRef.current) return;
 
-    // 1. Clean up previous render
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
-    // 2. Setup Dimensions
-    const width = 1200; // Increased width for better visibility
-    const height = 800;
-    const margin = { top: 40, right: 120, bottom: 40, left: 120 };
+    const width = window.innerWidth;
+    const height = window.innerHeight - 60; // 减去顶栏高度
+    const margin = { top: 50, right: 100, bottom: 50, left: 100 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
-    // 3. Data Stratification
     try {
-      // Handle cases where parentId might be empty string -> convert to null for d3.stratify if needed
-      // But typically d3.stratify expects explicit null or empty string handling based on root.
-      // Here we assume the root has parentId === "" or null.
-      const stratify = d3.stratify<FamilyMember>()
-        .id((d) => d.id)
-        .parentId((d) => d.parentId || null); // Treat empty string as root
+      const root = d3.stratify<FamilyMember>()
+        .id(d => d.id)
+        .parentId(d => d.parentId)(data);
 
-      const root = stratify(data);
-
-      // 4. Tree Layout
-      const treeLayout = d3.tree<FamilyMember>()
-        .size([innerHeight, innerWidth])
-        .separation((a, b) => (a.parent === b.parent ? 1.2 : 2)); // More space between nodes
-
+      const treeLayout = d3.tree<FamilyMember>().size([innerHeight, innerWidth]);
       treeLayout(root);
 
-      // 5. Container Group
-      const g = svg
-        .append("g")
+      // 支持缩放和平移
+      const g = svg.append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
 
-      // --- A. Links (Curved lines) ---
+      const zoom = d3.zoom<SVGSVGElement, unknown>()
+          .scaleExtent([0.5, 2])
+          .on("zoom", (event) => {
+              g.attr("transform", event.transform);
+          });
+      svg.call(zoom);
+
+      // A. 绘制连线
       g.selectAll(".link")
         .data(root.links())
-        .enter()
-        .append("path")
+        .enter().append("path")
         .attr("class", "link")
         .attr("fill", "none")
-        .attr("stroke", "#cbd5e1") // Slate-300
+        .attr("stroke", "#555") // 深色背景下的连线颜色
         .attr("stroke-width", 2)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .attr("d", d3.linkHorizontal<d3.HierarchyPointLink<FamilyMember>, d3.HierarchyPointNode<FamilyMember>>()
-          .x((d) => d.y!)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .y((d) => d.x!) as any
+          .x(d => d.y!)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .y(d => d.x!) as any
         );
 
-      // --- B. Nodes ---
-      const node = g
-        .selectAll(".node")
+      // B. 绘制节点容器
+      const node = g.selectAll(".node")
         .data(root.descendants())
-        .enter()
-        .append("g")
+        .enter().append("g")
         .attr("class", "node")
-        .attr("transform", (d) => `translate(${d.y!},${d.x!})`)
+        .attr("transform", d => `translate(${d.y!},${d.x!})`)
         .style("cursor", "pointer");
 
-      // 1. Hit Area (Transparent Circle)
-      node
-        .append("circle")
-        .attr("r", 35)
+      // 1. 点击热区 (透明大圆)
+      node.append("circle")
+        .attr("r", 45)
         .attr("fill", "transparent")
+        .attr("stroke", "none")
         .style("pointer-events", "all")
         .on("click", (_event, d) => {
-          if (onNodeClick) {
-            onNodeClick(d.data.id);
-          } else if (window.CallBridge) {
-            // Fallback
-            window.CallBridge.invoke("showMemberDetail", d.data.id);
-          }
+           if (onNodeClick) {
+             onNodeClick(d.data.id);
+           }
         });
 
-      // 2. Visible Circle (Status Indicator)
-      node
-        .append("circle")
-        .attr("r", 24)
-        .attr("fill", (d) => {
-             // Gender Color: Blue for M, Pink/Red for F
-             return d.data.gender === 'F' ? "#ec4899" : "#3b82f6";
+      // 2. 头像背景框 (模拟 ui.html 中的 .node-avatar)
+      node.append("circle")
+        .attr("r", 30) // 半径 30 = 宽高 60
+        .attr("fill", "#555")
+        .attr("stroke", d => {
+            // 根据性别或状态改变边框颜色
+            if (d.data.gender === 'F') return '#e06c75'; // 粉色
+            return '#4a90e2'; // 蓝色
         })
-        .attr("stroke", "#fff")
         .attr("stroke-width", 3)
-        .style("filter", "drop-shadow(0px 2px 4px rgba(0,0,0,0.1))");
+        .style("pointer-events", "none");
 
-      // 3. Generation Label (Inside Circle)
-      node
-        .append("text")
-        .attr("dy", 5)
+      // 3. 头像内容 (这里暂时用 Emoji 或文字首字代替，因为 SVG image 处理 Base64 较复杂，为了性能先简化)
+      node.append("text")
+        .attr("dy", 8)
         .attr("text-anchor", "middle")
-        .text((d) => {
-            // Priority: Generation Name > Generation Number
-            return d.data.generationName || d.data.generation;
-        })
-        .style("fill", "white")
-        .style("font-size", "14px")
-        .style("font-weight", "bold")
-        .style("font-family", "serif") // Serif looks better for Chinese characters
+        .text(d => d.data.gender === 'F' ? '👩' : '👨')
+        .style("font-size", "30px")
         .style("pointer-events", "none");
 
-      // 4. Name Label (Above Node)
-      node
-        .append("text")
-        .attr("dy", -32)
-        .attr("x", 0)
-        .style("text-anchor", "middle")
-        .text((d) => d.data.name)
-        .style("font-size", "16px")
-        .style("font-weight", "600")
-        .style("fill", "#1e293b") // Slate-800
-        .style("text-shadow", "0 1px 2px white")
+      // 4. 姓名标签 (模拟 .node-name)
+      // 背景胶囊
+      node.append("rect")
+        .attr("x", -40)
+        .attr("y", 35)
+        .attr("width", 80)
+        .attr("height", 24)
+        .attr("rx", 12)
+        .attr("fill", "rgba(0,0,0,0.7)")
         .style("pointer-events", "none");
 
-      // 5. Mate & LifeSpan (Below Node)
-      node
-        .append("text")
-        .attr("dy", 38)
+      // 姓名文字
+      node.append("text")
+        .attr("dy", 52)
         .attr("x", 0)
-        .style("text-anchor", "middle")
-        .style("font-size", "11px")
-        .style("fill", "#64748b") // Slate-500
-        .each(function(d) {
-            const el = d3.select(this);
-            // Line 1: Mate
-            if (d.data.mateName) {
-                el.append("tspan")
-                  .attr("x", 0)
-                  .attr("dy", 0)
-                  .text(`配: ${d.data.mateName}`);
-            }
-            // Line 2: LifeSpan
-            if (d.data.lifeSpan) {
-                el.append("tspan")
-                  .attr("x", 0)
-                  .attr("dy", d.data.mateName ? 14 : 0) // New line if mate exists
-                  .text(d.data.lifeSpan);
-            }
-        });
+        .attr("text-anchor", "middle")
+        .text(d => d.data.name)
+        .style("font-size", "12px")
+        .style("fill", "#e5e5e5")
+        .style("pointer-events", "none");
 
     } catch (error) {
-      console.error("D3 Rendering Error:", error);
-      svg
-        .append("text")
-        .text("Error rendering tree. Please check console.")
-        .attr("fill", "red")
-        .attr("x", 50)
-        .attr("y", 50);
+      console.error("D3 绘图失败:", error);
     }
+
   }, [data, onNodeClick]);
 
   return (
-    <div
-      style={{
-        width: '100%',
-        height: '100%',
-        overflow: "auto",
-        background: "#f8fafc", // Slate-50
-        borderRadius: "12px",
-        boxShadow: "inset 0 0 10px rgba(0,0,0,0.05)"
-      }}
-    >
-      <svg ref={svgRef} width={1200} height={800} style={{ display: 'block' }}></svg>
+    <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+      <svg ref={svgRef} width="100%" height="100%"></svg>
     </div>
   );
 };

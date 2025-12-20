@@ -22,7 +22,7 @@ struct Member {
     // 关系
     std::string father_id;
     std::string mother_id;    // 【新增】母系关联
-    std::string mate_name;    // 配偶姓名 (数据库对应字段 spouse_name)
+    std::string spouse_name;    // 配偶姓名 (数据库对应字段 spouse_name)
 
     // 时间与地点 (使用 ISO 8601 字符串 "YYYY-MM-DD")
     std::string birth_date;   // 【新增】

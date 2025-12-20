@@ -216,7 +216,7 @@ void DatabaseManager::SaveMember(const Member& m) {
         else
             query.bind(7, m.mother_id);
 
-        query.bind(8, m.mate_name);
+        query.bind(8, m.spouse_name);
         query.bind(9, m.birth_date);
         query.bind(10, m.death_date);
         query.bind(11, m.birth_place);
@@ -244,7 +244,7 @@ Member ParseMemberFromQuery(SQLite::Statement& query) {
     if (!query.getColumn("mother_id").isNull())
         m.mother_id = query.getColumn("mother_id").getText();
     try {
-        m.mate_name = query.getColumn("spouse_name").getText();
+        m.spouse_name = query.getColumn("spouse_name").getText();
     } catch (...) {
     }
     m.birth_date = query.getColumn("birth_date").getText();
