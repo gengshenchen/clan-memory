@@ -57,6 +57,7 @@ public:
     std::vector<Member> SearchMembers(const std::string& keyword);
 
     void SaveMember(const Member& m);
+    bool UpdateMemberPortrait(const std::string& memberId, const std::string& portraitPath);
     void AddMediaResource(const MediaResource& res);
     std::vector<MediaResource> GetMediaResources(const std::string& memberId, const std::string& type);
 private:

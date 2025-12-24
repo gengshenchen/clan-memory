@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QApplication>
+#include <QStandardPaths>
 
 #include "core/db/database_manager.h"
 #include "core/log/log.h"
@@ -26,7 +27,7 @@ void JsBridge::test(const QString& message) {
 }
 
 QString JsBridge::fetchFamilyTree() {
-    auto& db = clan::core::DatabaseManager::instance();
+  auto& db = clan::core::DatabaseManager::instance();
     auto members = db.GetAllMembers();
 
     QJsonArray jsonArray;
@@ -39,6 +40,7 @@ QString JsBridge::fetchFamilyTree() {
         jobj["generationName"] = QString::fromStdString(m.generation_name);
         jobj["spouseName"] = QString::fromStdString(m.spouse_name);
         jobj["gender"] = QString::fromStdString(m.gender);
+        jobj["portraitPath"] = QString::fromStdString(m.portrait_path);
 
         QString lifeSpan;
         if (!m.birth_date.empty()) {
@@ -214,4 +216,38 @@ QString JsBridge::fetchMemberResources(const QString& memberId, const QString& t
 
     QJsonDocument doc(jsonArray);
     return doc.toJson(QJsonDocument::Compact);
+}
+void JsBridge::updateMemberPortrait(const QString& memberId) {
+    if (memberId.isEmpty()) {
+        return;
+    }
+
+    // 1. 打开原生文件选择对话框
+    // 限制只能选择图片格式
+    QString fileName = QFileDialog::getOpenFileName(
+        nullptr,
+        tr("选择头像 (Select Portrait)"),
+        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation),
+        tr("Images (*.png *.jpg *.jpeg *.bmp)"));
+
+    if (fileName.isEmpty()) {
+        return; // 用户取消了选择
+    }
+
+    // 2. 更新数据库
+    // 注意：DatabaseManager 需要支持 UpdateMemberPortrait 方法
+    bool success =clan::core::DatabaseManager::instance().UpdateMemberPortrait(
+        memberId.toStdString(),
+        fileName.toStdString()
+    );
+
+    if (success) {
+        qDebug() << "Portrait updated for member:" << memberId << "Path:" << fileName;
+
+        // 3. 关键步骤：主动刷新前端的成员详情
+        // 这会触发前端的 onMemberDetailReceived 回调，从而更新头像显示
+        fetchMemberDetail(memberId);
+    } else {
+        qWarning() << "Failed to update portrait in database.";
+    }
 }

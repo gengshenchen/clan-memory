@@ -16,7 +16,8 @@ function App() {
     selectedMember,
     setSelectedMember,
     avatarSrc,
-    fetchMemberDetail
+    fetchMemberDetail,
+    updateMemberPortrait,
   } = useClanBridge();
 
   const media = useMedia(selectedMember);
@@ -59,7 +60,11 @@ function App() {
     <>
       <TopBar
         isAdmin={isAdminMode}
-        onAdminClick={() => isAdminMode ? window.confirm("退出?") && setIsAdminMode(false) : setIsLoginOpen(true)}
+        onAdminClick={() =>
+          isAdminMode
+            ? window.confirm("退出?") && setIsAdminMode(false)
+            : setIsLoginOpen(true)
+        }
         onSearch={handleSearch}
       />
 
@@ -72,7 +77,9 @@ function App() {
 
       {familyData.length === 0 && (
         <div className="hint-bar">
-          <div className="hint-pill">{isBridgeReady ? "数据加载中..." : "连接核心中..."}</div>
+          <div className="hint-pill">
+            {isBridgeReady ? "数据加载中..." : "连接核心中..."}
+          </div>
         </div>
       )}
 
@@ -83,6 +90,10 @@ function App() {
         avatarSrc={avatarSrc}
         onOpenMedia={media.actions.openMedia}
         onReadBio={() => setIsFullBioOpen(true)}
+        onUpdatePortrait={() => {
+            console.log("App: onUpdatePortrait called", selectedMember?.id);
+            if (selectedMember) updateMemberPortrait(selectedMember.id);
+        }}
       />
 
       <MediaPlayer
@@ -103,21 +114,28 @@ function App() {
           changeSpeed: media.actions.changeSpeed,
           setAudioPlaying: media.actions.setAudioPlaying,
           setAudioProgress: media.actions.setAudioProgress,
-          setAudioDuration: media.actions.setAudioDuration
+          setAudioDuration: media.actions.setAudioDuration,
         }}
         avatarSrc={avatarSrc}
       />
 
       <div className={`full-bio-overlay ${isFullBioOpen ? "active" : ""}`}>
-        <div className="bio-header"><button className="back-btn" onClick={() => setIsFullBioOpen(false)}>← 返回</button></div>
+        <div className="bio-header">
+          <button className="back-btn" onClick={() => setIsFullBioOpen(false)}>
+            ← 返回
+          </button>
+        </div>
         <div className="bio-content-scroll">
           {selectedMember && (
             <article className="bio-article">
               <h1>{selectedMember.name} 生平传略</h1>
               <div className="bio-article-meta">
-                第{selectedMember.generation}世 · {selectedMember.generationName}字辈
+                第{selectedMember.generation}世 ·{" "}
+                {selectedMember.generationName}字辈
               </div>
-              <div className="bio-body"><p>{selectedMember.bio || "暂无。"}</p></div>
+              <div className="bio-body">
+                <p>{selectedMember.bio || "暂无。"}</p>
+              </div>
             </article>
           )}
         </div>
@@ -126,18 +144,41 @@ function App() {
       <div className={`modal-overlay ${isLoginOpen ? "active" : ""}`}>
         <div className="modal-box">
           <h2>管理员登录</h2>
-          <input type="password" className="modal-input" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+          <input
+            type="password"
+            className="modal-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+          />
           <div className="modal-actions">
-            <button className="btn btn-secondary" onClick={() => setIsLoginOpen(false)}>取消</button>
-            <button className="btn btn-primary" onClick={handleLogin}>登录</button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setIsLoginOpen(false)}
+            >
+              取消
+            </button>
+            <button className="btn btn-primary" onClick={handleLogin}>
+              登录
+            </button>
           </div>
         </div>
       </div>
 
-      <div className={`admin-dashboard ${isDashboardOpen ? "active" : ""}`} id="adminDashboard">
-        <div className="dashboard-header"><button className="close-dashboard-btn" onClick={() => setIsDashboardOpen(false)}>✕</button></div>
+      <div
+        className={`admin-dashboard ${isDashboardOpen ? "active" : ""}`}
+        id="adminDashboard"
+      >
+        <div className="dashboard-header">
+          <button
+            className="close-dashboard-btn"
+            onClick={() => setIsDashboardOpen(false)}
+          >
+            ✕
+          </button>
+        </div>
         <div className="dashboard-content">
-           <div style={{color:'white', padding:20}}>管理员功能开发中...</div>
+          <div style={{ color: "white", padding: 20 }}>管理员功能开发中...</div>
         </div>
       </div>
     </>

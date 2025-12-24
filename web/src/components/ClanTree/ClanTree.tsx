@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import * as d3 from "d3";
 import { type FamilyMember } from "../../types";
 
@@ -21,8 +21,31 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(({ data, onNodeClick,
 
   const [root, setRoot] = useState<d3.HierarchyPointNode<FamilyMember> | null>(null);
 
-  // 1. 数据处理与布局
-  useMemo(() => {
+  // [Fix] 增强版路径转换函数
+  const getAvatarUrl = (path?: string) => {
+    if (!path || path.trim() === "") return "";
+    // 1. 如果已经是网络图片、Base64 或 file 协议，直接返回
+    if (path.startsWith("http") || path.startsWith("data:") || path.startsWith("file:")) return path;
+
+    // 2. 规范化路径：将 Windows 反斜杠转换为正斜杠 (重要！)
+    const normalizedPath = path.replace(/\\/g, "/");
+
+    // 3. 处理 Windows 盘符 (例如 C:/...) -> file:///C:/...
+    if (/^[a-zA-Z]:/.test(normalizedPath)) {
+        return `file:///${normalizedPath}`;
+    }
+
+    // 4. 处理 Linux/Unix 绝对路径 (/home/...) -> file:///home/...
+    if (normalizedPath.startsWith("/")) {
+        return `file://${normalizedPath}`;
+    }
+
+    return `file://${normalizedPath}`;
+  };
+
+  // [Fix] 必须使用 useEffect 处理副作用 (状态更新)
+  // 之前使用 useMemo 调用 setRoot 是错误的，会导致 React 报错
+  useEffect(() => {
     if (!data || data.length === 0) {
         setRoot(null);
         return;
@@ -33,18 +56,16 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(({ data, onNodeClick,
         .parentId((d) => d.parentId || "");
 
       const rootNode = stratify(data);
-
-      // [Fix] 再次增大节点间距，防止任何重叠
       const treeLayout = d3.tree<FamilyMember>().nodeSize([250, 320]);
 
+      // 在 useEffect 中更新 State 是安全的
       setRoot(treeLayout(rootNode));
     } catch (e) {
       console.error("Tree layout error:", e);
     }
   }, [data]);
 
-  // 2. 初始化 D3 Zoom
-  // [Critical Fix] 依赖项加入 [root]，确保 SVG 渲染后再绑定事件
+  // 初始化 D3 Zoom
   useEffect(() => {
     if (!root || !svgRef.current || !gRef.current) return;
 
@@ -60,26 +81,21 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(({ data, onNodeClick,
     zoomBehavior.current = zoom;
     svg.call(zoom).on("dblclick.zoom", null);
 
-    // [Fix] 初始居中逻辑：将根节点移到屏幕上方中间
+    // 初始居中逻辑
     if (containerRef.current) {
         const { clientWidth } = containerRef.current;
-        // D3 Tree 根节点默认在 (0,0)
-        // 我们平移 (width/2, 100) 让它显示在正上方
         const initialTransform = d3.zoomIdentity.translate(clientWidth / 2, 100).scale(0.85);
         svg.call(zoom.transform, initialTransform);
     }
   }, [root]);
 
-  // 3. 暴露给父组件的方法
+  // 暴露给父组件的方法
   useImperativeHandle(ref, () => ({
     focusNode: (id: string) => {
       if (!root || !svgRef.current || !zoomBehavior.current) return;
 
       const target = root.descendants().find(d => d.data.id === id);
-      if (!target) {
-          alert("未找到该成员节点");
-          return;
-      }
+      if (!target) return;
 
       const svg = d3.select(svgRef.current);
       const width = svgRef.current.clientWidth;
@@ -95,7 +111,6 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(({ data, onNodeClick,
     }
   }));
 
-  // 4. 绘制直角连线
   const generatePath = (source: { x: number; y: number }, target: { x: number; y: number }) => {
     const midY = (source.y + target.y) / 2;
     return `M${source.x},${source.y} V${midY} H${target.x} V${target.y}`;
@@ -107,16 +122,22 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(({ data, onNodeClick,
     <div ref={containerRef} className="tree-container" style={{ width: '100%', height: '100vh', overflow: 'hidden', background: '#1a1a1a', cursor: 'grab' }}>
       <svg ref={svgRef} width="100%" height="100%" style={{ width: '100%', height: '100%', touchAction: 'none' }}>
         <g ref={gRef}>
-          {/* 连线 */}
           {root.links().map((link, i) => (
             <path key={`link-${i}`} d={generatePath(link.source, link.target)} fill="none" stroke="#555" strokeWidth="1.5" />
           ))}
 
-          {/* 节点 */}
           {root.descendants().map((node) => {
             const d = node.data;
             const isSelected = selectedId === d.id;
             const isMale = d.gender === 'M';
+
+            // [Fix] 兼容性处理：尝试获取 camelCase 或 snake_case 字段
+            // C++ 数据库通常返回下划线命名 (portrait_path)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const rawPath = d.portraitPath || (d as any).portrait_path;
+
+            // 转换路径
+            const imageUrl = getAvatarUrl(rawPath);
 
             return (
               <g
@@ -124,29 +145,25 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(({ data, onNodeClick,
                 transform={`translate(${node.x}, ${node.y})`}
                 style={{ cursor: 'pointer' }}
               >
-                {/* [Fix] 扩大 foreignObject 视口，防止阴影或头像被切 */}
-                {/* 以前是 140x160 (-70,-40)，现在改为 200x200 (-100,-100) 以容纳任何溢出 */}
                 <foreignObject x="-100" y="-100" width="200" height="200" style={{ pointerEvents: 'none', overflow: 'visible' }}>
 
-                  {/* 内部容器：恢复点击事件，并居中真实的卡片 */}
                   <div style={{
                       width: '100%', height: '100%',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      pointerEvents: 'none' // 容器本身不接管点击，让内部卡片接管
+                      pointerEvents: 'none'
                   }}>
 
-                    {/* 真正的卡片节点 */}
                     <div className={`tree-node ${isSelected ? 'active' : ''} ${isMale ? 'node-male' : 'node-female'}`}
                          onClick={(e) => {
-                           e.stopPropagation(); // 阻止触发背景拖拽
+                           e.stopPropagation();
                            onNodeClick(d.id);
                          }}
                          style={{
-                           width: '140px', height: '160px', // 固定卡片尺寸
+                           width: '140px', height: '160px',
                            boxSizing: 'border-box',
                            display: 'flex', flexDirection: 'column', alignItems: 'center',
                            justifyContent: 'center',
-                           pointerEvents: 'auto', // [Fix] 恢复交互
+                           pointerEvents: 'auto',
                            transition: 'all 0.3s',
                            background: '#333',
                            borderRadius: '8px',
@@ -161,12 +178,18 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(({ data, onNodeClick,
                           width: '80px', height: '80px', borderRadius: '50%',
                           overflow: 'hidden', marginBottom: '10px',
                           background: '#222', border: `3px solid ${isMale ? '#4a90e2' : '#e24a4a'}`,
-                          // 阴影放在头像上也行
-                          boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
+                          boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
                       }}>
-                          {d.portraitPath ? (
-                              <img src={d.portraitPath} alt="" style={{width:'100%', height:'100%', objectFit:'cover'}}
-                                   onError={(e) => (e.currentTarget.style.display = 'none')} />
+                          {imageUrl ? (
+                              // [Fix] 添加 key={imageUrl}，确保 URL 变化时组件重置 (清除 display:none)
+                              <img
+                                   key={imageUrl}
+                                   src={imageUrl}
+                                   alt=""
+                                   style={{width:'100%', height:'100%', objectFit:'cover'}}
+                                   onError={(e) => (e.currentTarget.style.display = 'none')}
+                              />
                           ) : (
                               <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'40px', paddingBottom:'5px'}}>
                                   {isMale ? "👨" : "👩"}
@@ -174,7 +197,6 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(({ data, onNodeClick,
                           )}
                       </div>
 
-                      {/* 名字与代数 */}
                       <div style={{fontWeight: 'bold', color: '#fff', fontSize: '16px', marginBottom: '4px', textShadow: '0 1px 3px black'}}>{d.name}</div>
                       <div style={{fontSize: '12px', color: '#ccc', background: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px'}}>
                           {d.generation}世 · {d.generationName}字辈

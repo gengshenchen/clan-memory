@@ -272,6 +272,37 @@ std::vector<Member> DatabaseManager::SearchMembers(const std::string& keyword) {
     return result;
 }
 
+bool DatabaseManager::UpdateMemberPortrait(const std::string& memberId, const std::string& portraitPath) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_) {
+        LOGERROR("[DB] Database not initialized.");
+        return false;
+    }
+
+    try {
+        // 使用参数化查询防止注入
+        SQLite::Statement query(*db_, "UPDATE members SET portrait_path = ? WHERE id = ?");
+
+        // 绑定参数
+        query.bind(1, portraitPath);
+        query.bind(2, memberId);
+
+        // 执行更新
+        int rowsAffected = query.exec();
+
+        if (rowsAffected > 0) {
+            LOGINFO("[DB] Updated portrait for member {}: {}", memberId, portraitPath);
+            return true;
+        } else {
+            LOGWARN("[DB] Update portrait failed: Member {} not found or path unchanged.", memberId);
+            return false;
+        }
+
+    } catch (std::exception& e) {
+        LOGERROR("[DB] UpdateMemberPortrait exception: {}", e.what());
+        return false;
+    }
+}
 // ---------------------------------------------------------
 // Media Resource Operations (v0.8)
 // ---------------------------------------------------------

@@ -322,5 +322,37 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
             if (m_cefView)
                 m_cefView->executeJavascript(frameId, jsCode, "");
         }
+    } else if (method == "updateMemberPortrait") {
+        if (!arguments.isEmpty()) {
+            QString memberId = arguments.first().toString();
+            qInfo() << "[C++] Dispatching updateMemberPortrait for ID:" << memberId;
+
+            // 1. 执行更新 (这会阻塞直到用户选完文件)
+            m_jsBridge->updateMemberPortrait(memberId);
+
+            // 2. 立即刷新侧边栏 (SidePanel)
+            // 重新获取该成员详情，并通过 onMemberDetailReceived 推送给前端
+            QString detailJson = m_jsBridge->fetchMemberDetail(memberId);
+            QString detailJs =
+                QString("if(window.onMemberDetailReceived) { window.onMemberDetailReceived(%1); }")
+                    .arg(detailJson);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, detailJs, "");
+            }
+
+            // 3. 立即刷新族谱树 (ClanTree) TODO 局部刷新
+            // 重新获取整个列表，并通过 onFamilyTreeDataReceived 推送给前端
+            // 这样 ClanTree 上的节点小头像也会变
+            QString treeJson = m_jsBridge->fetchFamilyTree();
+            QString treeJs =
+                QString(
+                    "if(window.onFamilyTreeDataReceived) { window.onFamilyTreeDataReceived(%1); }")
+                    .arg(treeJson);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, treeJs, "");
+            }
+
+            qInfo() << "[C++] Portrait updated, refreshed UI for member:" << memberId;
+        }
     }
 }

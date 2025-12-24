@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 interface TopBarProps {
   onAdminClick: () => void;
@@ -10,14 +10,17 @@ const TopBar: React.FC<TopBarProps> = ({ onAdminClick, isAdmin, onSearch }) => {
   const [searchText, setSearchText] = useState("");
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       onSearch(searchText);
     }
   };
 
   return (
     <div className="top-bar">
-      <div className="logo"><span style={{ fontSize: "24px" }}>🏛️</span> 宗族记忆<span className="admin-badge">管理员模式</span></div>
+      <div className="logo">
+        <span style={{ fontSize: "24px" }}>🏛️</span> 宗族记忆
+        <span className="admin-badge">管理员模式</span>
+      </div>
       <div className="search-container">
         <input
           type="text"
@@ -28,7 +31,11 @@ const TopBar: React.FC<TopBarProps> = ({ onAdminClick, isAdmin, onSearch }) => {
           onKeyDown={handleKeyDown}
         />
       </div>
-      <div className="settings-btn" onClick={onAdminClick} title={isAdmin ? "退出" : "登录"}>
+      <div
+        className="settings-btn"
+        onClick={onAdminClick}
+        title={isAdmin ? "退出" : "登录"}
+      >
         {isAdmin ? "🚪" : "⚙️"}
       </div>
     </div>

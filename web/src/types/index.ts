@@ -20,7 +20,7 @@ export interface MediaItem {
   id: string;
   url: string;
   title: string;
-  type: 'video' | 'photo' | 'audio';
+  type: "video" | "photo" | "audio";
 }
 
 // 扩展 Window 接口

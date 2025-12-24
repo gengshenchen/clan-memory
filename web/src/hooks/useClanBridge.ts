@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
-import type { FamilyMember } from '../types'; // [Fix] type import
+import { useState, useEffect } from "react";
+import type { FamilyMember } from "../types"; // [Fix] type import
 
 export const useClanBridge = () => {
   const [isBridgeReady, setIsBridgeReady] = useState(false);
   const [familyData, setFamilyData] = useState<FamilyMember[]>([]);
-  const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
+  const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(
+    null
+  );
   const [avatarSrc, setAvatarSrc] = useState<string>("");
 
   // 暴露给外部调用 C++ 的方法
@@ -18,6 +20,15 @@ export const useClanBridge = () => {
 
   const getLocalImage = (path: string) => {
     window.CallBridge?.invoke("getLocalImage", path);
+  };
+
+  const updateMemberPortrait = (id: string) => {
+      console.log("Hook: calling C++ updateMemberPortrait", id);
+      if (window.CallBridge) {
+          window.CallBridge.invoke("updateMemberPortrait", id);
+      } else {
+          console.warn("Bridge not connected!");
+      }
   };
 
   useEffect(() => {
@@ -36,7 +47,10 @@ export const useClanBridge = () => {
             setSelectedMember(data);
             // 处理头像逻辑
             if (data.portraitPath) {
-              if (data.portraitPath.startsWith("http") || data.portraitPath.startsWith("//")) {
+              if (
+                data.portraitPath.startsWith("http") ||
+                data.portraitPath.startsWith("//")
+              ) {
                 setAvatarSrc(data.portraitPath);
               } else {
                 getLocalImage(data.portraitPath);
@@ -66,6 +80,7 @@ export const useClanBridge = () => {
     selectedMember,
     setSelectedMember, // 允许手动关闭详情
     avatarSrc,
-    fetchMemberDetail
+    fetchMemberDetail,
+    updateMemberPortrait, // 导出此方法供组件使用
   };
 };

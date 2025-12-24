@@ -20,6 +20,19 @@
     </message>
 </context>
 <context>
+    <name>JsBridge</name>
+    <message>
+        <location filename="../../src/app/js_bridge.cpp" line="229"/>
+        <source>选择头像 (Select Portrait)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/js_bridge.cpp" line="231"/>
+        <source>Images (*.png *.jpg *.jpeg *.bmp)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>MainWindow</name>
     <message>
         <location filename="../../src/app/mainwindow.ui" line="14"/>
