@@ -48,7 +48,7 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowIcon(QIcon(":/icons/app-icon.svg"));
     setFixedWidth(800);
     setFixedHeight(600);
-   // setupMenus();
+    // setupMenus();
 
     // QToolBar* toolBar = addToolBar("Main");
     // QPushButton* button = new QPushButton("Call JS", this);
@@ -60,7 +60,7 @@ MainWindow::MainWindow(QWidget* parent)
     // });
 
     // setupDocks();
-    //printf_resource_runtime();
+    // printf_resource_runtime();
 
     m_jsBridge = new JsBridge(this);
     embedCefView();
@@ -225,24 +225,23 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
             m_cefView->executeJavascript(frameId, jsCode, "");
             qDebug() << "[C++] Data sent to frontend, length:" << jsonStr.length();
         }
-    }
-    else if (method == "searchMembers") {
+    } else if (method == "searchMembers") {
         if (!arguments.isEmpty()) {
             QString keyword = arguments.first().toString();
             // 搜索结果返回的是 JSON 数组字符串，例如 [{"id":"..."}, ...]
             QString jsonResult = m_jsBridge->searchMembers(keyword);
 
             // 拼接 JS 回调，同样以对象字面量形式传递
-            QString jsCode = QString(
-                "if(window.onSearchResultsReceived) { window.onSearchResultsReceived(%1); }")
-                .arg(jsonResult);
+            QString jsCode =
+                QString(
+                    "if(window.onSearchResultsReceived) { window.onSearchResultsReceived(%1); }")
+                    .arg(jsonResult);
 
             if (m_cefView) {
                 m_cefView->executeJavascript(frameId, jsCode, "");
             }
         }
-    }
-    else if (method == "showMemberDetail") {
+    } else if (method == "showMemberDetail") {
         // arguments[0] 是我们传过来的 ID
         if (!arguments.isEmpty()) {
             QString memberId = arguments.first().toString();
@@ -254,8 +253,7 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
             // QMessageBox::information(this, "点击事件", msg);
             // 如果不想弹框，只看控制台日志也可以
         }
-    }
-    else if (method == "fetchMemberDetail") {
+    } else if (method == "fetchMemberDetail") {
         if (!arguments.isEmpty()) {
             // 1. 获取参数
             QString id = arguments.first().toString();
@@ -266,8 +264,9 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
 
             // 3. 回调前端
             // 注意：如果 jsonResult 是 "null"，前端判断 member 为空显示“未找到”
-            QString jsCode = QString("if(window.onMemberDetailReceived) { window.onMemberDetailReceived(%1); }")
-                                 .arg(jsonResult);
+            QString jsCode =
+                QString("if(window.onMemberDetailReceived) { window.onMemberDetailReceived(%1); }")
+                    .arg(jsonResult);
 
             if (m_cefView) {
                 m_cefView->executeJavascript(frameId, jsCode, "");
@@ -284,12 +283,44 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
             // 回调前端：这里我们定义一个新的回调名 onLocalImageLoaded
             // 为了区分是哪张图，我们把 path 也传回去，或者简单点，直接由前端 Promise 处理
             // 这里演示简单的回调模式：
-            QString jsCode = QString("if(window.onLocalImageLoaded) { window.onLocalImageLoaded('%1', '%2'); }")
-                                 .arg(path.replace("\\", "\\\\")) // 处理路径转义
-                                 .arg(base64Data);
+            QString jsCode =
+                QString("if(window.onLocalImageLoaded) { window.onLocalImageLoaded('%1', '%2'); }")
+                    .arg(path.replace("\\", "\\\\"))  // 处理路径转义
+                    .arg(base64Data);
 
-            if (m_cefView) m_cefView->executeJavascript(frameId, jsCode, "");
+            if (m_cefView)
+                m_cefView->executeJavascript(frameId, jsCode, "");
+        }
+    } else if (method == "importResource") {
+        if (arguments.size() >= 2) {
+            QString memberId = arguments.at(0).toString();
+            QString type = arguments.at(1).toString();  // "video", "photo"
+
+            // 调用 Bridge (会阻塞 UI 直到文件选完并复制完，简单场景可接受)
+            QString jsonResult = m_jsBridge->importResource(memberId, type);
+
+            // 回调前端刷新列表
+            QString jsCode =
+                QString("if(window.onResourceImported) { window.onResourceImported(%1); }")
+                    .arg(jsonResult);
+            if (m_cefView)
+                m_cefView->executeJavascript(frameId, jsCode, "");
+        }
+    } else if (method == "fetchMemberResources") {
+        if (arguments.size() >= 2) {
+            QString memberId = arguments.at(0).toString();
+            QString type = arguments.at(1).toString();
+
+            QString jsonResult = m_jsBridge->fetchMemberResources(memberId, type);
+
+            // 回调前端
+            QString jsCode = QString(
+                                 "if(window.onMemberResourcesReceived) { "
+                                 "window.onMemberResourcesReceived(%1, '%2'); }")
+                                 .arg(jsonResult)
+                                 .arg(type);  // 把 type 传回去方便前端判断
+            if (m_cefView)
+                m_cefView->executeJavascript(frameId, jsCode, "");
         }
     }
-
 }

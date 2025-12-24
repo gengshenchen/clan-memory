@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import * as d3 from 'd3';
+import React, { useState, useRef, useMemo } from "react";
+import * as d3 from "d3";
 
 export interface FamilyMember {
   id: string;
@@ -7,143 +7,171 @@ export interface FamilyMember {
   gender?: string;
   generation: number;
   generationName: string;
-
   parentId: string;
   motherId: string;
   spouseName: string;
-
   birthDate?: string;
   deathDate?: string;
   birthPlace?: string;
   deathPlace?: string;
   portraitPath?: string;
   bio?: string;
+  children?: FamilyMember[]; // Added for D3 hierarchy
 }
 
 interface ClanTreeProps {
   data: FamilyMember[];
   onNodeClick?: (id: string) => void;
+  selectedId?: string | null;
 }
 
-const ClanTree: React.FC<ClanTreeProps> = ({ data, onNodeClick }) => {
-  const svgRef = useRef<SVGSVGElement>(null);
+const PAN_LIMIT_X = 500;
+const PAN_LIMIT_Y = 300;
 
-  useEffect(() => {
-    if (!data || data.length === 0 || !svgRef.current) return;
-
-    const svg = d3.select(svgRef.current);
-    svg.selectAll("*").remove();
-
-    const width = window.innerWidth;
-    const height = window.innerHeight - 60; // 减去顶栏高度
-    const margin = { top: 50, right: 100, bottom: 50, left: 100 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
-
+const ClanTree: React.FC<ClanTreeProps> = ({
+  data,
+  onNodeClick,
+  selectedId,
+}) => {
+  // 1. D3 Hierarchy Layout Calculation
+  const root = useMemo(() => {
+    if (!data || data.length === 0) return null;
     try {
-      const root = d3.stratify<FamilyMember>()
-        .id(d => d.id)
-        .parentId(d => d.parentId)(data);
+      const stratify = d3
+        .stratify<FamilyMember>()
+        .id((d) => d.id)
+        .parentId((d) => d.parentId);
 
-      const treeLayout = d3.tree<FamilyMember>().size([innerHeight, innerWidth]);
-      treeLayout(root);
+      const rootNode = stratify(data);
 
-      // 支持缩放和平移
-      const g = svg.append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
+      // Vertical Layout: nodeSize controls spacing [width, height]
+      // Width: horizontal space between siblings
+      // Height: vertical space between generations
+      const treeLayout = d3.tree<FamilyMember>().nodeSize([140, 180]);
 
-      const zoom = d3.zoom<SVGSVGElement, unknown>()
-          .scaleExtent([0.5, 2])
-          .on("zoom", (event) => {
-              g.attr("transform", event.transform);
-          });
-      svg.call(zoom);
-
-      // A. 绘制连线
-      g.selectAll(".link")
-        .data(root.links())
-        .enter().append("path")
-        .attr("class", "link")
-        .attr("fill", "none")
-        .attr("stroke", "#555") // 深色背景下的连线颜色
-        .attr("stroke-width", 2)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .attr("d", d3.linkHorizontal<d3.HierarchyPointLink<FamilyMember>, d3.HierarchyPointNode<FamilyMember>>()
-          .x(d => d.y!)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .y(d => d.x!) as any
-        );
-
-      // B. 绘制节点容器
-      const node = g.selectAll(".node")
-        .data(root.descendants())
-        .enter().append("g")
-        .attr("class", "node")
-        .attr("transform", d => `translate(${d.y!},${d.x!})`)
-        .style("cursor", "pointer");
-
-      // 1. 点击热区 (透明大圆)
-      node.append("circle")
-        .attr("r", 45)
-        .attr("fill", "transparent")
-        .attr("stroke", "none")
-        .style("pointer-events", "all")
-        .on("click", (_event, d) => {
-           if (onNodeClick) {
-             onNodeClick(d.data.id);
-           }
-        });
-
-      // 2. 头像背景框 (模拟 ui.html 中的 .node-avatar)
-      node.append("circle")
-        .attr("r", 30) // 半径 30 = 宽高 60
-        .attr("fill", "#555")
-        .attr("stroke", d => {
-            // 根据性别或状态改变边框颜色
-            if (d.data.gender === 'F') return '#e06c75'; // 粉色
-            return '#4a90e2'; // 蓝色
-        })
-        .attr("stroke-width", 3)
-        .style("pointer-events", "none");
-
-      // 3. 头像内容 (这里暂时用 Emoji 或文字首字代替，因为 SVG image 处理 Base64 较复杂，为了性能先简化)
-      node.append("text")
-        .attr("dy", 8)
-        .attr("text-anchor", "middle")
-        .text(d => d.data.gender === 'F' ? '👩' : '👨')
-        .style("font-size", "30px")
-        .style("pointer-events", "none");
-
-      // 4. 姓名标签 (模拟 .node-name)
-      // 背景胶囊
-      node.append("rect")
-        .attr("x", -40)
-        .attr("y", 35)
-        .attr("width", 80)
-        .attr("height", 24)
-        .attr("rx", 12)
-        .attr("fill", "rgba(0,0,0,0.7)")
-        .style("pointer-events", "none");
-
-      // 姓名文字
-      node.append("text")
-        .attr("dy", 52)
-        .attr("x", 0)
-        .attr("text-anchor", "middle")
-        .text(d => d.data.name)
-        .style("font-size", "12px")
-        .style("fill", "#e5e5e5")
-        .style("pointer-events", "none");
-
-    } catch (error) {
-      console.error("D3 绘图失败:", error);
+      return treeLayout(rootNode);
+    } catch (e) {
+      console.error("Tree layout error:", e);
+      return null;
     }
+  }, [data]);
 
-  }, [data, onNodeClick]);
+  // 2. Dragging (Panning) State
+  const [translate, setTranslate] = useState({ x: 0, y: 150 }); // Initial Offset
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Prevent drag if clicking on a node
+    if ((e.target as HTMLElement).closest(".tree-node")) return;
+
+    setIsDragging(true);
+    dragStart.current = {
+      x: e.clientX - translate.x,
+      y: e.clientY - translate.y,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+
+    let newX = e.clientX - dragStart.current.x;
+    let newY = e.clientY - dragStart.current.y;
+
+    // Apply Boundary Checks (Clamping)
+    if (newX > PAN_LIMIT_X) newX = PAN_LIMIT_X;
+    if (newX < -PAN_LIMIT_X) newX = -PAN_LIMIT_X;
+    if (newY > PAN_LIMIT_Y) newY = PAN_LIMIT_Y;
+    if (newY < -PAN_LIMIT_Y) newY = -PAN_LIMIT_Y;
+
+    setTranslate({ x: newX, y: newY });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  // 3. Helper to generate orthogonal paths (Inverted-T style)
+  const generatePath = (
+    source: { x: number; y: number },
+    target: { x: number; y: number }
+  ) => {
+    const midY = (source.y + target.y) / 2;
+    return `M${source.x},${source.y}
+            V${midY}
+            H${target.x}
+            V${target.y}`;
+  };
+
+  if (!root) return null;
 
   return (
-    <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
-      <svg ref={svgRef} width="100%" height="100%"></svg>
+    <div
+      className="main-canvas" // This class has overflow:hidden and background
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      style={{ cursor: isDragging ? "grabbing" : "grab" }}
+    >
+      {/* Transform Layer */}
+      <div
+        className="tree-layer"
+        style={{
+          transform: `translate(calc(50% + ${translate.x}px), ${translate.y}px)`,
+        }}
+      >
+        {/* Layer A: SVG Connectors (Z-Index 0) */}
+        <svg className="connector-lines" style={{ overflow: "visible" }}>
+          {root.links().map((link, i) => (
+            <path
+              key={i}
+              d={generatePath(link.source, link.target)}
+              fill="none"
+              stroke="#555"
+              strokeWidth="2"
+            />
+          ))}
+        </svg>
+
+        {/* Layer B: HTML Nodes (Z-Index 2) */}
+        {root.descendants().map((node) => {
+          const member = node.data;
+          const isMale = member.gender === "M" || member.gender === "Male";
+          const isSelected = selectedId === member.id;
+
+          // Determine classes
+          let nodeClass = "tree-node";
+          if (isMale) nodeClass += " node-male";
+          else nodeClass += " node-female";
+
+          if (isSelected) nodeClass += " active";
+
+          return (
+            <div
+              key={member.id}
+              className={nodeClass}
+              style={{ left: node.x, top: node.y }}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent drag start
+                onNodeClick?.(member.id);
+              }}
+            >
+              <div className="node-avatar">
+                {member.portraitPath ? (
+                  <img src={member.portraitPath} alt={member.name} />
+                ) : (
+                  <span style={{ fontSize: "30px", pointerEvents: "none" }}>
+                    {isMale ? "👨" : "👩"}
+                  </span>
+                )}
+              </div>
+              <div className="node-name">
+                {member.name} ({member.generation}世)
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

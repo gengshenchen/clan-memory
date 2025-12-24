@@ -8,6 +8,7 @@ add_library(Core STATIC
     task/task_manager.cc
     network/network_manager.cc
     db/database_manager.cc
+    resource/resource_manager.cc
 )
 # 為Core庫的目標添加編譯定義，以開啟httplib的SSL功能。
 # 這等效於在編譯所有Core庫的源文件時，都加上 -DCPPHTTPLIB_OPENSSL_SUPPORT 編譯選項。

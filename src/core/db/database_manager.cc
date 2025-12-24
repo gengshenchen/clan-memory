@@ -1,70 +1,73 @@
-#include "database_manager.h"
+#include "core/db/database_manager.h"
+
+#include <iostream>
+#include <filesystem>
+#include <vector>
+#include <chrono> // [Added] Include for time
+#include <cstdint> // [Added] For int64_t
 
 #include <SQLiteCpp/SQLiteCpp.h>
 
-#include <filesystem>
-#include <iostream>
-#include <set>  // 用于去重
-
 #include "core/log/log.h"
+#include "core/platform/path_manager.h"
 
 namespace clan::core {
+
+namespace fs = std::filesystem;
+
+// =========================================
+//  DatabaseManager Implementation
+// =========================================
+
+DatabaseManager::DatabaseManager() {
+}
+
+DatabaseManager::~DatabaseManager() {
+    // Unique_ptr handles cleanup
+}
 
 DatabaseManager& DatabaseManager::instance() {
     static DatabaseManager instance;
     return instance;
 }
 
-DatabaseManager::DatabaseManager() {
-}
-DatabaseManager::~DatabaseManager() {
-}
-
 void DatabaseManager::Initialize(const std::string& dbPath) {
     std::lock_guard<std::mutex> lock(db_mutex_);
+
+    // Ensure directory exists
+    fs::path path(dbPath);
+    if (path.has_parent_path() && !fs::exists(path.parent_path())) {
+        fs::create_directories(path.parent_path());
+    }
+
     try {
-        std::filesystem::path path(dbPath);
-        if (path.has_parent_path()) {
-            std::filesystem::create_directories(path.parent_path());
-        }
+        // Open database (Read/Write | Create if missing)
+        db_ = std::make_unique<SQLite::Database>(
+            dbPath, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
 
-        db_ = std::make_unique<SQLite::Database>(dbPath,
-                                                 SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+        LOGINFO("[DB] Database opened at: {}", dbPath);
 
-        // 启用外键约束
+        // Enable Foreign Keys
         db_->exec("PRAGMA foreign_keys = ON;");
 
+        // Create Tables
         CreateTables();
-        CheckAndMigrateSchema();
+
+        // FTS Check
         CheckFTSSupport();
 
-        LOGINFO("[DB] Initialized at: {}", dbPath);
-    } catch (const std::exception& e) {
-        LOGERROR("[DB] Init failed: {}", e.what());
-    }
-}
-
-void DatabaseManager::CheckFTSSupport() {
-    try {
-        db_->exec("CREATE VIRTUAL TABLE IF NOT EXISTS temp_fts_check USING fts5(content)");
-        db_->exec("DROP TABLE temp_fts_check");
-        LOGINFO("[DB] SQLite FTS5 extension is ENABLED. Full-text search is ready.");
     } catch (std::exception& e) {
-        LOGCRITICAL("[DB] SQLite FTS5 extension is NOT enabled! Error: {}", e.what());
+        LOGERROR("[DB] Initialize failed: {}", e.what());
     }
 }
 
 void DatabaseManager::CreateTables() {
+    if (!db_) return;
+
     try {
         SQLite::Transaction transaction(*db_);
 
-        db_->exec(R"(
-            CREATE TABLE IF NOT EXISTS system_config (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            );
-        )");
-
+        // 1. Members Table
         db_->exec(R"(
             CREATE TABLE IF NOT EXISTS members (
                 id TEXT PRIMARY KEY,
@@ -72,278 +75,285 @@ void DatabaseManager::CreateTables() {
                 gender TEXT,
                 generation INTEGER,
                 generation_name TEXT,
-
                 father_id TEXT,
                 mother_id TEXT,
                 spouse_name TEXT,
-
                 birth_date TEXT,
                 death_date TEXT,
                 birth_place TEXT,
                 death_place TEXT,
-
-                bio TEXT,
                 portrait_path TEXT,
-
+                bio TEXT,
                 created_at INTEGER,
-                updated_at INTEGER,
-
-                FOREIGN KEY(father_id) REFERENCES members(id) ON DELETE SET NULL,
-                FOREIGN KEY(mother_id) REFERENCES members(id) ON DELETE SET NULL
+                updated_at INTEGER
             );
         )");
 
-        db_->exec("CREATE INDEX IF NOT EXISTS idx_members_father ON members(father_id);");
-        db_->exec("CREATE INDEX IF NOT EXISTS idx_members_name ON members(name);");
+        // 2. Full Text Search (FTS5) Virtual Table
+        // Note: FTS tables are virtual, they don't support standard ALTER TABLE well.
+        // We link it to members via triggers or manual updates.
+        // Here we use Contentless or External Content FTS if needed,
+        // but for simplicity in v0.5, we populate it manually or via triggers.
+        db_->exec(R"(
+            CREATE VIRTUAL TABLE IF NOT EXISTS members_fts USING fts5(
+                name, bio, content='members', content_rowid='rowid'
+            );
+        )");
 
+        // Triggers to keep FTS in sync with Members
+        db_->exec(R"(
+            CREATE TRIGGER IF NOT EXISTS members_ai AFTER INSERT ON members BEGIN
+              INSERT INTO members_fts(rowid, name, bio) VALUES (new.rowid, new.name, new.bio);
+            END;
+            CREATE TRIGGER IF NOT EXISTS members_ad AFTER DELETE ON members BEGIN
+              INSERT INTO members_fts(members_fts, rowid, name, bio) VALUES('delete', old.rowid, old.name, old.bio);
+            END;
+            CREATE TRIGGER IF NOT EXISTS members_au AFTER UPDATE ON members BEGIN
+              INSERT INTO members_fts(members_fts, rowid, name, bio) VALUES('delete', old.rowid, old.name, old.bio);
+              INSERT INTO members_fts(rowid, name, bio) VALUES (new.rowid, new.name, new.bio);
+            END;
+        )");
+
+        // 3. Media Resources Table
+        // [Added] Table for v0.8 media support
         db_->exec(R"(
             CREATE TABLE IF NOT EXISTS media_resources (
-                id TEXT PRIMARY KEY,
-                member_id TEXT NOT NULL,
-                resource_type TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                original_name TEXT,
-                file_hash TEXT,
-                file_size INTEGER,
-                title TEXT,
-                description TEXT,
-                is_primary BOOLEAN DEFAULT 0,
-                created_at INTEGER,
+                id TEXT PRIMARY KEY,           -- Unique ID
+                member_id TEXT NOT NULL,       -- Foreign Key to Member
+                resource_type TEXT NOT NULL,   -- 'video', 'photo', 'audio'
+                file_path TEXT NOT NULL,       -- Relative path in resources dir
+                title TEXT,                    -- Display title
+                description TEXT,              -- Optional description
+                file_hash TEXT,                -- SHA256 or unique hash for deduplication
+                file_size INTEGER,             -- File size in bytes
+                created_at INTEGER,            -- Import timestamp
+                is_primary BOOLEAN DEFAULT 0,  -- Is this the primary profile video/photo?
                 FOREIGN KEY(member_id) REFERENCES members(id) ON DELETE CASCADE
             );
         )");
+
+        // Create Indexes
+        db_->exec("CREATE INDEX IF NOT EXISTS idx_members_father ON members(father_id);");
         db_->exec("CREATE INDEX IF NOT EXISTS idx_media_member ON media_resources(member_id);");
 
-        // 尝试创建 FTS 表
-        try {
-            // 尝试使用 trigram 分词器 (SQLite 3.34+ 支持)，对中文支持更好
-            // 如果不支持 trigram，SQLiteCpp 会抛异常，我们在 catch 里降级为默认分词器
-            db_->exec(R"(
-                CREATE VIRTUAL TABLE IF NOT EXISTS members_fts USING fts5(
-                    name,
-                    bio,
-                    birth_place,
-                    content='members',
-                    content_rowid='rowid',
-                    tokenize='trigram'
-                );
-            )");
-        } catch (...) {
-            // 降级策略：使用默认分词器 (unicode61)
-            // 虽然对中文分词支持一般，但总比没有好，后续我们用 LIKE 兜底
-            db_->exec(R"(
-                CREATE VIRTUAL TABLE IF NOT EXISTS members_fts USING fts5(
-                    name,
-                    bio,
-                    birth_place,
-                    content='members',
-                    content_rowid='rowid'
-                );
-            )");
-        }
-
-        // 触发器 (Trigger) - 保持 FTS 表同步
-        db_->exec(
-            "CREATE TRIGGER IF NOT EXISTS members_ai AFTER INSERT ON members BEGIN INSERT INTO "
-            "members_fts(rowid, name, bio, birth_place) VALUES (new.rowid, new.name, new.bio, "
-            "new.birth_place); END;");
-        db_->exec(
-            "CREATE TRIGGER IF NOT EXISTS members_ad AFTER DELETE ON members BEGIN INSERT INTO "
-            "members_fts(members_fts, rowid, name, bio, birth_place) VALUES('delete', old.rowid, "
-            "old.name, old.bio, old.birth_place); END;");
-        db_->exec(
-            "CREATE TRIGGER IF NOT EXISTS members_au AFTER UPDATE ON members BEGIN INSERT INTO "
-            "members_fts(members_fts, rowid, name, bio, birth_place) VALUES('delete', old.rowid, "
-            "old.name, old.bio, old.birth_place); INSERT INTO members_fts(rowid, name, bio, "
-            "birth_place) VALUES (new.rowid, new.name, new.bio, new.birth_place); END;");
-
         transaction.commit();
+        LOGINFO("[DB] Tables initialized successfully.");
+
     } catch (std::exception& e) {
         LOGERROR("[DB] CreateTables failed: {}", e.what());
     }
 }
 
-void DatabaseManager::CheckAndMigrateSchema() {
-    if (!db_)
-        return;
-    std::vector<std::pair<std::string, std::string>> columns = {{"generation_name", "TEXT"},
-                                                                {"mother_id", "TEXT"},
-                                                                {"spouse_name", "TEXT"},
-                                                                {"birth_date", "TEXT"},
-                                                                {"death_date", "TEXT"},
-                                                                {"birth_place", "TEXT"},
-                                                                {"death_place", "TEXT"},
-                                                                {"portrait_path", "TEXT"},
-                                                                {"bio", "TEXT"}};
-    for (const auto& col : columns) {
-        try {
-            db_->exec("SELECT " + col.first + " FROM members LIMIT 0");
-        } catch (std::exception&) {
-            try {
-                db_->exec("ALTER TABLE members ADD COLUMN " + col.first + " " + col.second);
-            } catch (std::exception& e) {
-                LOGERROR("[DB] Migration failed for {}: {}", col.first, e.what());
-            }
-        }
-    }
-}
-
-void DatabaseManager::SaveMember(const Member& m) {
-    std::lock_guard<std::mutex> lock(db_mutex_);
-    if (!db_)
-        return;
+void DatabaseManager::CheckFTSSupport() {
+    if (!db_) return;
     try {
-        SQLite::Statement query(*db_, R"(
-            INSERT OR REPLACE INTO members
-            (id, name, gender, generation, generation_name, father_id, mother_id, spouse_name,
-             birth_date, death_date, birth_place, death_place, portrait_path, bio)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        )");
-
-        query.bind(1, m.id);
-        query.bind(2, m.name);
-        query.bind(3, m.gender);
-        query.bind(4, m.generation);
-        query.bind(5, m.generation_name);
-
-        // 空字符串转 nullptr，防止外键约束失败
-        if (m.father_id.empty())
-            query.bind(6, nullptr);
-        else
-            query.bind(6, m.father_id);
-        if (m.mother_id.empty())
-            query.bind(7, nullptr);
-        else
-            query.bind(7, m.mother_id);
-
-        query.bind(8, m.spouse_name);
-        query.bind(9, m.birth_date);
-        query.bind(10, m.death_date);
-        query.bind(11, m.birth_place);
-        query.bind(12, m.death_place);
-        query.bind(13, m.portrait_path);
-        query.bind(14, m.bio);
-
-        query.exec();
+        // Simple check query
+        SQLite::Statement query(*db_, "SELECT count(*) FROM members_fts WHERE members_fts MATCH 'test'");
+        LOGINFO("[DB] FTS5 is active.");
     } catch (std::exception& e) {
-        LOGERROR("[DB] Save failed: {}", e.what());
+        LOGWARN("[DB] FTS5 check failed (Msg: {}). Search might be limited.", e.what());
     }
 }
 
-// 辅助函数：从 Query 中提取 Member
-Member ParseMemberFromQuery(SQLite::Statement& query) {
-    Member m;
-    m.id = query.getColumn("id").getText();
-    m.name = query.getColumn("name").getText();
-    m.gender = query.getColumn("gender").getText();
-    m.generation = query.getColumn("generation").getInt();
-    if (!query.getColumn("generation_name").isNull())
-        m.generation_name = query.getColumn("generation_name").getText();
-    if (!query.getColumn("father_id").isNull())
-        m.father_id = query.getColumn("father_id").getText();
-    if (!query.getColumn("mother_id").isNull())
-        m.mother_id = query.getColumn("mother_id").getText();
-    try {
-        m.spouse_name = query.getColumn("spouse_name").getText();
-    } catch (...) {
-    }
-    m.birth_date = query.getColumn("birth_date").getText();
-    m.death_date = query.getColumn("death_date").getText();
-    m.birth_place = query.getColumn("birth_place").getText();
-    m.death_place = query.getColumn("death_place").getText();
-    m.portrait_path = query.getColumn("portrait_path").getText();
-    m.bio = query.getColumn("bio").getText();
-    return m;
-}
+// ---------------------------------------------------------
+// Member Operations
+// ---------------------------------------------------------
 
 std::vector<Member> DatabaseManager::GetAllMembers() {
     std::lock_guard<std::mutex> lock(db_mutex_);
-    std::vector<Member> list;
-    if (!db_)
-        return list;
+    std::vector<Member> result;
+    if (!db_) return result;
+
     try {
-        SQLite::Statement query(*db_, "SELECT * FROM members");
+        SQLite::Statement query(*db_, "SELECT * FROM members ORDER BY generation ASC");
+
         while (query.executeStep()) {
-            list.push_back(ParseMemberFromQuery(query));
+            Member m;
+            m.id = query.getColumn("id").getText();
+            m.name = query.getColumn("name").getText();
+            m.gender = query.getColumn("gender").getText();
+            m.generation = query.getColumn("generation").getInt();
+            m.generation_name = query.getColumn("generation_name").getText();
+
+            // Handle nullable fields
+            if (!query.getColumn("father_id").isNull())
+                m.father_id = query.getColumn("father_id").getText();
+            if (!query.getColumn("mother_id").isNull())
+                m.mother_id = query.getColumn("mother_id").getText();
+            if (!query.getColumn("spouse_name").isNull())
+                m.spouse_name = query.getColumn("spouse_name").getText();
+
+            m.birth_date = query.getColumn("birth_date").getText();
+            m.death_date = query.getColumn("death_date").getText();
+            m.birth_place = query.getColumn("birth_place").getText();
+            m.death_place = query.getColumn("death_place").getText();
+
+            m.portrait_path = query.getColumn("portrait_path").getText();
+            m.bio = query.getColumn("bio").getText();
+
+            result.push_back(m);
         }
     } catch (std::exception& e) {
-        LOGERROR("[DB] Query All failed: {}", e.what());
+        LOGERROR("[DB] GetAllMembers failed: {}", e.what());
     }
-    return list;
+    return result;
 }
 
 Member DatabaseManager::GetMemberById(const std::string& id) {
     std::lock_guard<std::mutex> lock(db_mutex_);
     Member m;
+    if (!db_) return m;
+
     try {
-        if (!db_)
-            return m;
         SQLite::Statement query(*db_, "SELECT * FROM members WHERE id = ?");
         query.bind(1, id);
+
         if (query.executeStep()) {
-            m = ParseMemberFromQuery(query);
+            m.id = query.getColumn("id").getText();
+            m.name = query.getColumn("name").getText();
+            m.gender = query.getColumn("gender").getText();
+            m.generation = query.getColumn("generation").getInt();
+            m.generation_name = query.getColumn("generation_name").getText();
+
+            if (!query.getColumn("father_id").isNull())
+                m.father_id = query.getColumn("father_id").getText();
+            if (!query.getColumn("mother_id").isNull())
+                m.mother_id = query.getColumn("mother_id").getText();
+            if (!query.getColumn("spouse_name").isNull())
+                m.spouse_name = query.getColumn("spouse_name").getText();
+
+            m.birth_date = query.getColumn("birth_date").getText();
+            m.death_date = query.getColumn("death_date").getText();
+            m.birth_place = query.getColumn("birth_place").getText();
+            m.death_place = query.getColumn("death_place").getText();
+            m.portrait_path = query.getColumn("portrait_path").getText();
+            m.bio = query.getColumn("bio").getText();
         }
     } catch (std::exception& e) {
+        LOGERROR("[DB] GetMemberById failed: {}", e.what());
     }
     return m;
 }
 
-// 【架构升级】混合搜索：FTS + LIKE
 std::vector<Member> DatabaseManager::SearchMembers(const std::string& keyword) {
     std::lock_guard<std::mutex> lock(db_mutex_);
-    std::vector<Member> list;
-    std::set<std::string> addedIds;  // 用于去重
-    if (!db_)
-        return list;
+    std::vector<Member> result;
+    if (!db_) return result;
 
-    // 1. 尝试 FTS 搜索 (性能优先)
     try {
+        // Hybrid Search:
+        // 1. Exact match on name (High priority)
+        // 2. Full-text search on bio (FTS)
+        // For v0.5 MVP, let's stick to FTS query
+
+        // Note: FTS syntax usually requires sanitization.
+        // Simple implementation:
+        std::string ftsQuery = "\"" + keyword + "\""; // Exact phrase search
+
         SQLite::Statement query(*db_, R"(
             SELECT m.* FROM members m
             JOIN members_fts f ON m.rowid = f.rowid
             WHERE members_fts MATCH ?
             ORDER BY rank
         )");
-        query.bind(1, keyword);
+        query.bind(1, ftsQuery);
 
         while (query.executeStep()) {
-            Member m = ParseMemberFromQuery(query);
-            if (addedIds.find(m.id) == addedIds.end()) {
-                list.push_back(m);
-                addedIds.insert(m.id);
-            }
+            Member m;
+            m.id = query.getColumn("id").getText();
+            m.name = query.getColumn("name").getText();
+            m.generation = query.getColumn("generation").getInt();
+            m.bio = query.getColumn("bio").getText();
+            result.push_back(m);
         }
     } catch (std::exception& e) {
-        // FTS 失败是预期的（比如表不存在或语法错误），静默失败，走兜底逻辑
+        LOGERROR("[DB] SearchMembers failed: {}", e.what());
     }
+    return result;
+}
 
-    // 2. 兜底策略：如果 FTS 没搜到结果（常见于中文分词问题），或者我们想保证绝对的召回率
-    // 使用标准 SQL LIKE 模糊匹配 (兼容性优先)
-    if (list.empty()) {
-        try {
-            // 搜索 姓名 或 生平
-            SQLite::Statement query(*db_, R"(
-                SELECT * FROM members
-                WHERE name LIKE ? OR bio LIKE ?
-                LIMIT 50
-            )");
-            std::string pattern = "%" + keyword + "%";
-            query.bind(1, pattern);
-            query.bind(2, pattern);
+// ---------------------------------------------------------
+// Media Resource Operations (v0.8)
+// ---------------------------------------------------------
 
-            while (query.executeStep()) {
-                Member m = ParseMemberFromQuery(query);
-                if (addedIds.find(m.id) == addedIds.end()) {
-                    list.push_back(m);
-                    addedIds.insert(m.id);
-                }
-            }
-        } catch (std::exception& e) {
-            LOGERROR("[DB] LIKE Search failed: {}", e.what());
+// [Added] Insert a new media resource record
+void DatabaseManager::AddMediaResource(const MediaResource& res) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_) return;
+
+    try {
+        // [Added] Using REPLACE to handle potential duplicate IDs if logic changes
+        SQLite::Statement query(*db_, R"(
+            INSERT OR REPLACE INTO media_resources
+            (id, member_id, resource_type, file_path, title, description, file_hash, file_size, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        )");
+
+        query.bind(1, res.id);
+        query.bind(2, res.member_id);
+        query.bind(3, res.resource_type);
+        query.bind(4, res.file_path);
+        query.bind(5, res.title);
+        query.bind(6, res.description);
+        query.bind(7, res.file_hash);
+
+        // [Fixed] Explicit cast to int64_t to resolve overload ambiguity
+        query.bind(8, static_cast<int64_t>(res.file_size));
+
+        // [Added] Use current timestamp if not provided
+        // [Fixed] Explicit type int64_t for 'now'
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        query.bind(9, now);
+
+        query.exec();
+        LOGINFO("[DB] Added media resource: {}", res.title);
+    } catch (std::exception& e) {
+        LOGERROR("[DB] AddMediaResource failed: {}", e.what());
+    }
+}
+
+// [Added] Query resources by member ID and type
+std::vector<MediaResource> DatabaseManager::GetMediaResources(const std::string& memberId,
+                                                              const std::string& type) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    std::vector<MediaResource> list;
+    if (!db_) return list;
+
+    try {
+        SQLite::Statement query(*db_, R"(
+            SELECT * FROM media_resources
+            WHERE member_id = ? AND resource_type = ?
+            ORDER BY created_at DESC
+        )");
+
+        query.bind(1, memberId);
+        query.bind(2, type);
+
+        while (query.executeStep()) {
+            MediaResource res;
+            res.id = query.getColumn("id").getText();
+            res.member_id = query.getColumn("member_id").getText();
+            res.resource_type = query.getColumn("resource_type").getText();
+            res.file_path = query.getColumn("file_path").getText();
+            res.title = query.getColumn("title").getText();
+
+            // [Modified] Handle nullable columns safely
+            if (!query.getColumn("description").isNull())
+                res.description = query.getColumn("description").getText();
+
+            if (!query.getColumn("file_hash").isNull())
+                res.file_hash = query.getColumn("file_hash").getText();
+
+            res.file_size = query.getColumn("file_size").getInt64();
+            res.created_at = query.getColumn("created_at").getInt64();
+
+            list.push_back(res);
         }
+    } catch (std::exception& e) {
+        LOGERROR("[DB] GetMediaResources failed: {}", e.what());
     }
-
     return list;
 }
 
-}  // namespace clan::core
+} // namespace clan::core

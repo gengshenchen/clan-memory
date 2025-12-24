@@ -11,6 +11,17 @@ namespace SQLite { class Database; }
 
 namespace clan::core  {
 
+struct MediaResource {
+    std::string id;
+    std::string member_id;
+    std::string resource_type;
+    std::string file_path;
+    std::string title;
+    std::string description;
+    std::string file_hash;
+    long long file_size = 0;
+    long long created_at = 0;
+};
 // 产品级结构体：包含完整的家谱信息
 struct Member {
     std::string id;
@@ -45,16 +56,16 @@ public:
     Member GetMemberById(const std::string& id);
     std::vector<Member> SearchMembers(const std::string& keyword);
 
-    // 保存或更新成员信息
     void SaveMember(const Member& m);
-
+    void AddMediaResource(const MediaResource& res);
+    std::vector<MediaResource> GetMediaResources(const std::string& memberId, const std::string& type);
 private:
     DatabaseManager();
     ~DatabaseManager();
 
     void CreateTables();
     void CheckAndMigrateSchema();
-    void CheckFTSSupport(); // 【新增】检测全文检索支持情况
+    void CheckFTSSupport();
 
     std::unique_ptr<SQLite::Database> db_;
     std::mutex db_mutex_;
