@@ -72,6 +72,7 @@ function App() {
         ref={treeRef}
         data={familyData}
         onNodeClick={handleNodeClick}
+        onBackgroundClick={() => setSelectedMember(null)}
         selectedId={selectedMember?.id}
       />
 
