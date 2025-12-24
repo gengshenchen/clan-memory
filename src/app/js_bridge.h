@@ -15,4 +15,5 @@ public slots:
     Q_INVOKABLE QString searchMembers(const QString& keyword);
     Q_INVOKABLE QString importResource(const QString& memberId, const QString& type);
     Q_INVOKABLE QString fetchMemberResources(const QString& memberId, const QString& type);
+
 };
