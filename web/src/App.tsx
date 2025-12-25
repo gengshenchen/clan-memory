@@ -108,8 +108,8 @@ function App() {
           close: media.actions.closeMedia,
           select: media.actions.setCurrentMediaUrl,
           upload: media.actions.uploadMedia,
-          next: media.actions.next, // [Fix] 绑定了切换逻辑
-          prev: media.actions.prev, // [Fix] 绑定了切换逻辑
+          next: media.actions.next,
+          prev: media.actions.prev,
           toggleAudio: media.actions.toggleAudio,
           seekAudio: media.actions.seekAudio,
           changeSpeed: media.actions.changeSpeed,
