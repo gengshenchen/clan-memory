@@ -3,8 +3,8 @@
 #include <iostream>
 #include <filesystem>
 #include <vector>
-#include <chrono> // [Added] Include for time
-#include <cstdint> // [Added] For int64_t
+#include <chrono>
+#include <cstdint>
 
 #include <SQLiteCpp/SQLiteCpp.h>
 
@@ -15,9 +15,6 @@ namespace clan::core {
 
 namespace fs = std::filesystem;
 
-// =========================================
-//  DatabaseManager Implementation
-// =========================================
 
 DatabaseManager::DatabaseManager() {
 }
@@ -244,8 +241,6 @@ std::vector<Member> DatabaseManager::SearchMembers(const std::string& keyword) {
         // Hybrid Search:
         // 1. Exact match on name (High priority)
         // 2. Full-text search on bio (FTS)
-        // For v0.5 MVP, let's stick to FTS query
-
         // Note: FTS syntax usually requires sanitization.
         // Simple implementation:
         std::string ftsQuery = "\"" + keyword + "\""; // Exact phrase search
@@ -303,17 +298,14 @@ bool DatabaseManager::UpdateMemberPortrait(const std::string& memberId, const st
         return false;
     }
 }
-// ---------------------------------------------------------
-// Media Resource Operations (v0.8)
-// ---------------------------------------------------------
 
-// [Added] Insert a new media resource record
+// Insert a new media resource record
 void DatabaseManager::AddMediaResource(const MediaResource& res) {
     std::lock_guard<std::mutex> lock(db_mutex_);
     if (!db_) return;
 
     try {
-        // [Added] Using REPLACE to handle potential duplicate IDs if logic changes
+        // Using REPLACE to handle potential duplicate IDs if logic changes
         SQLite::Statement query(*db_, R"(
             INSERT OR REPLACE INTO media_resources
             (id, member_id, resource_type, file_path, title, description, file_hash, file_size, created_at)
@@ -328,11 +320,11 @@ void DatabaseManager::AddMediaResource(const MediaResource& res) {
         query.bind(6, res.description);
         query.bind(7, res.file_hash);
 
-        // [Fixed] Explicit cast to int64_t to resolve overload ambiguity
+        //  Explicit cast to int64_t to resolve overload ambiguity
         query.bind(8, static_cast<int64_t>(res.file_size));
 
-        // [Added] Use current timestamp if not provided
-        // [Fixed] Explicit type int64_t for 'now'
+        // Use current timestamp if not provided
+        // Explicit type int64_t for 'now'
         int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
         query.bind(9, now);
@@ -344,7 +336,7 @@ void DatabaseManager::AddMediaResource(const MediaResource& res) {
     }
 }
 
-// [Added] Query resources by member ID and type
+// Query resources by member ID and type
 std::vector<MediaResource> DatabaseManager::GetMediaResources(const std::string& memberId,
                                                               const std::string& type) {
     std::lock_guard<std::mutex> lock(db_mutex_);
@@ -369,7 +361,7 @@ std::vector<MediaResource> DatabaseManager::GetMediaResources(const std::string&
             res.file_path = query.getColumn("file_path").getText();
             res.title = query.getColumn("title").getText();
 
-            // [Modified] Handle nullable columns safely
+            // Handle nullable columns safely
             if (!query.getColumn("description").isNull())
                 res.description = query.getColumn("description").getText();
 

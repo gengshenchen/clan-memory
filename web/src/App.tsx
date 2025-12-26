@@ -92,8 +92,8 @@ function App() {
         onOpenMedia={media.actions.openMedia}
         onReadBio={() => setIsFullBioOpen(true)}
         onUpdatePortrait={() => {
-            console.log("App: onUpdatePortrait called", selectedMember?.id);
-            if (selectedMember) updateMemberPortrait(selectedMember.id);
+          console.log("App: onUpdatePortrait called", selectedMember?.id);
+          if (selectedMember) updateMemberPortrait(selectedMember.id);
         }}
       />
 

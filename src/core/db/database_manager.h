@@ -28,18 +28,18 @@ struct Member {
     std::string name;
     std::string gender;       // "M" or "F"
     int generation = 1;
-    std::string generation_name; // 【新增】字辈 (如 "定", "英")
+    std::string generation_name; // 字辈 (如 "定", "英")
 
     // 关系
     std::string father_id;
-    std::string mother_id;    // 【新增】母系关联
-    std::string spouse_name;    // 配偶姓名 (数据库对应字段 spouse_name)
+    std::string mother_id;    // 母系关联
+    std::string spouse_name;    // 配偶姓名
 
     // 时间与地点 (使用 ISO 8601 字符串 "YYYY-MM-DD")
-    std::string birth_date;   // 【新增】
-    std::string death_date;   // 【新增】
-    std::string birth_place;  // 【新增】
-    std::string death_place;  // 【新增】
+    std::string birth_date;
+    std::string death_date;
+    std::string birth_place;
+    std::string death_place;
 
     // 媒体与描述
     std::string portrait_path; // 头像路径

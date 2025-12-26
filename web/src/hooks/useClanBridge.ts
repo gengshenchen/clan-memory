@@ -23,12 +23,12 @@ export const useClanBridge = () => {
   };
 
   const updateMemberPortrait = (id: string) => {
-      console.log("Hook: calling C++ updateMemberPortrait", id);
-      if (window.CallBridge) {
-          window.CallBridge.invoke("updateMemberPortrait", id);
-      } else {
-          console.warn("Bridge not connected!");
-      }
+    console.log("Hook: calling C++ updateMemberPortrait", id);
+    if (window.CallBridge) {
+      window.CallBridge.invoke("updateMemberPortrait", id);
+    } else {
+      console.warn("Bridge not connected!");
+    }
   };
 
   useEffect(() => {

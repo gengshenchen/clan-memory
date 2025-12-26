@@ -1078,7 +1078,7 @@ body.admin-mode .admin-dashboard.active {
 .profile-img-lg {
   /* ... existing styles ... */
   cursor: pointer; /* 确保显示手型 */
-  z-index: 10;     /* 提高层级，防止被遮挡 */
+  z-index: 10; /* 提高层级，防止被遮挡 */
   pointer-events: auto; /* 确保能接收点击 */
   overflow: hidden; /* 确保图片不溢出圆角 */
 }

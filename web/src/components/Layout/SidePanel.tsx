@@ -38,37 +38,52 @@ const SidePanel: React.FC<SidePanelProps> = ({
         <div
           className="profile-img-lg"
           onClick={() => {
-              console.log("Avatar clicked, triggering update...");
-              onUpdatePortrait();
+            console.log("Avatar clicked, triggering update...");
+            onUpdatePortrait();
           }}
           title="点击更换头像"
           style={{
-              cursor: "pointer",
-              position: "relative",
-              pointerEvents: "auto", // 强制开启交互
-              zIndex: 10 // 提高层级
+            cursor: "pointer",
+            position: "relative",
+            pointerEvents: "auto", // 强制开启交互
+            zIndex: 10, // 提高层级
           }}
         >
           {avatarSrc ? (
             <img
-                src={avatarSrc}
-                alt="Profile"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} // 让图片透传点击
+              src={avatarSrc}
+              alt="Profile"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                pointerEvents: "none",
+              }} // 让图片透传点击
             />
           ) : (
-            <span style={{ fontSize: "50px", color: "#ccc", pointerEvents: 'none' }}>
+            <span
+              style={{ fontSize: "50px", color: "#ccc", pointerEvents: "none" }}
+            >
               {member.gender === "F" ? "👩" : "👨"}
             </span>
           )}
 
           {/* 增加一个明显的 hover 遮罩层提示 */}
-          <div className="avatar-hover-hint" style={{
-              position: 'absolute', bottom: 0, width: '100%',
-              background: 'rgba(0,0,0,0.6)', color: 'white',
-              fontSize: '10px', textAlign: 'center', padding: '2px 0',
-              pointerEvents: 'none'
-          }}>
-              更换
+          <div
+            className="avatar-hover-hint"
+            style={{
+              position: "absolute",
+              bottom: 0,
+              width: "100%",
+              background: "rgba(0,0,0,0.6)",
+              color: "white",
+              fontSize: "10px",
+              textAlign: "center",
+              padding: "2px 0",
+              pointerEvents: "none",
+            }}
+          >
+            更换
           </div>
         </div>
 
