@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { MediaItem } from "../../types";
+import "./MediaPlayer.css";
 
 interface MediaPlayerProps {
   isActive: boolean;
@@ -40,420 +41,496 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   actions,
   avatarSrc,
 }) => {
-  const [isListCollapsed, setIsListCollapsed] = useState(false);
+  const [isPlaylistOpen, setIsPlaylistOpen] = useState(true);
+  const [showControls, setShowControls] = useState(true);
+  const [controlTimeout, setControlTimeout] = useState<number | null>(null);
+  const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Video-specific state
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [videoVolume, setVideoVolume] = useState(1);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [videoSpeed, setVideoSpeed] = useState(1);
+
+  // Generate video thumbnails
+  useEffect(() => {
+    mediaList.forEach(item => {
+      if (!thumbnails.has(item.url)) {
+        generateThumbnail(item.url);
+      }
+    });
+  }, [mediaList]);
+
+  const generateThumbnail = (videoUrl: string) => {
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.src = videoUrl;
+    video.muted = true;
+    video.currentTime = 1; // Seek to 1 second for thumbnail
+    
+    video.onloadeddata = () => {
+      video.currentTime = 1;
+    };
+    
+    video.onseeked = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 120;
+      canvas.height = 68;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
+        setThumbnails(prev => new Map(prev).set(videoUrl, thumbnailUrl));
+      }
+      video.remove();
+    };
+    
+    video.onerror = () => {
+      console.warn('Failed to generate thumbnail for:', videoUrl);
+      video.remove();
+    };
+  };
+
+  // Auto-hide controls
+  const resetControlTimer = () => {
+    setShowControls(true);
+    if (controlTimeout) clearTimeout(controlTimeout);
+    const isPlaying = type === "video" ? isVideoPlaying : audioState.isPlaying;
+    if ((type === "video" || type === "audio") && isPlaying) {
+      const timer = setTimeout(() => setShowControls(false), 3000);
+      setControlTimeout(timer);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (controlTimeout) clearTimeout(controlTimeout);
+    };
+  }, [controlTimeout]);
+
+  // Update control timer when playing state changes
+  useEffect(() => {
+    if (type === "video" && isVideoPlaying) {
+      resetControlTimer();
+    } else if (type === "audio" && audioState.isPlaying) {
+      resetControlTimer();
+    }
+  }, [isVideoPlaying, audioState.isPlaying]);
 
   if (!isActive) return null;
 
   const formatTime = (s: number) => {
+    if (!Number.isFinite(s)) return "0:00";
     const mins = Math.floor(s / 60);
     const secs = Math.floor(s % 60);
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
-  // 播放列表组件 (复用)
-  const PlaylistPanel = ({ icon }: { icon: string }) => {
-    if (isListCollapsed) {
-      return (
-        <div
-          style={{
-            width: "40px",
-            background: "#222",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            padding: "10px 0",
-            borderLeft: "1px solid #444",
-          }}
-        >
-          <button
-            onClick={() => setIsListCollapsed(false)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#fff",
-              cursor: "pointer",
-              fontSize: "18px",
-            }}
-          >
-            ◀
-          </button>
-        </div>
-      );
+  const currentItem = mediaList.find((i) => i.url === currentUrl);
+
+  // Video controls
+  const toggleVideoPlay = () => {
+    if (!videoRef.current) return;
+    if (isVideoPlaying) {
+      videoRef.current.pause();
+    } else {
+      videoRef.current.play();
     }
+  };
+
+  const seekVideo = (time: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = time;
+    setVideoProgress(time);
+  };
+
+  const changeVideoVolume = (vol: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.volume = vol;
+    setVideoVolume(vol);
+  };
+
+  const changeVideoSpeed = () => {
+    if (!videoRef.current) return;
+    const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const currentIdx = speeds.indexOf(videoSpeed);
+    const nextIdx = (currentIdx + 1) % speeds.length;
+    const newSpeed = speeds[nextIdx];
+    videoRef.current.playbackRate = newSpeed;
+    setVideoSpeed(newSpeed);
+  };
+
+  // Icon symbols (using Unicode for better compatibility)
+  const icons = {
+    back: "←",
+    play: "▶",
+    pause: "⏸",
+    prev: "⏮",
+    next: "⏭",
+    volume: "🔊",
+    mute: "🔇",
+    playlist: "☰",
+    fullscreenEnter: "⛶",
+    fullscreenExit: "⛶",
+    collapse: "»",
+    expand: "«",
+  };
+
+  // Handle playlist toggle
+  const handlePlaylistToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsPlaylistOpen(!isPlaylistOpen);
+  };
+
+  // Shared Playlist Component - auto-hide with controls
+  const isPlaylistVisible = isPlaylistOpen && showControls;
+  const renderPlaylist = (icon: string, isVideo: boolean = false) => (
+    <div className={`media-playlist ${isPlaylistVisible ? "open" : "collapsed"}`}>
+      <div className="playlist-header">
+        <h3>
+          {icon} 播放列表 <span>({mediaList.length})</span>
+        </h3>
+      </div>
+
+      <div className="playlist-content">
+        <button
+          className="upload-card"
+          onClick={actions.upload}
+          disabled={isUploading}
+        >
+          <span className="upload-icon">{isUploading ? "⏳" : "➕"}</span>
+          <span>上传{isVideo ? "视频" : "录音"}</span>
+        </button>
+
+        {mediaList.map((item, idx) => (
+          <div
+            key={idx}
+            className={`playlist-item ${currentUrl === item.url ? "active" : ""}`}
+            onClick={() => actions.select(item.url)}
+          >
+            {isVideo ? (
+              <div className="item-thumbnail">
+                {thumbnails.get(item.url) ? (
+                  <img src={thumbnails.get(item.url)} alt="" className="thumbnail-img" />
+                ) : (
+                  <div className="thumbnail-placeholder">🎬</div>
+                )}
+                {(item as unknown as { duration?: number }).duration && (
+                  <span className="item-duration">
+                    {formatTime((item as unknown as { duration: number }).duration)}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="item-icon">{icon}</div>
+            )}
+            <div className="item-info">
+              <span className="item-title">{item.title || "未命名"}</span>
+              <span className="item-meta">
+                {(item as unknown as { createdAt?: string }).createdAt
+                  ? new Date((item as unknown as { createdAt: string }).createdAt).toLocaleDateString()
+                  : ""}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Shared Control Bar for Video and Audio
+  const renderControlBar = (isVideo: boolean) => {
+    const progress = isVideo ? videoProgress : audioState.progress;
+    const duration = isVideo ? videoDuration : audioState.duration;
+    const isPlaying = isVideo ? isVideoPlaying : audioState.isPlaying;
+    const speed = isVideo ? videoSpeed : audioState.speed;
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const time = Number(e.target.value);
+      if (isVideo) {
+        seekVideo(time);
+      } else {
+        actions.seekAudio(time);
+      }
+    };
+
+    const handleTogglePlay = () => {
+      if (isVideo) {
+        toggleVideoPlay();
+      } else {
+        actions.toggleAudio();
+      }
+    };
+
+    const handleChangeSpeed = () => {
+      if (isVideo) {
+        changeVideoSpeed();
+      } else {
+        actions.changeSpeed();
+      }
+    };
 
     return (
-      <div
-        style={{
-          width: "320px",
-          background: "#222",
-          display: "flex",
-          flexDirection: "column",
-          borderLeft: "1px solid #444",
-          transition: "width 0.3s",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            padding: "10px 15px",
-            borderBottom: "1px solid #333",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            color: "#eee",
-          }}
-        >
-          <span style={{ fontWeight: "bold" }}>
-            播放列表 ({mediaList.length})
-          </span>
-          <button
-            onClick={() => setIsListCollapsed(true)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#999",
-              cursor: "pointer",
-            }}
-          >
-            ▶ 折叠
-          </button>
+      <div className={`control-bar ${showControls ? "visible" : "hidden"}`}>
+        {/* Progress Bar */}
+        <div className="progress-container">
+          <div className="progress-track" />
+          <div 
+            className="progress-played" 
+            style={{ width: `${(progress / (duration || 1)) * 100}%` }}
+          />
+          <input
+            type="range"
+            className="progress-input"
+            min={0}
+            max={duration || 100}
+            value={progress}
+            onChange={handleSeek}
+          />
+          <div 
+            className="progress-thumb" 
+            style={{ left: `${(progress / (duration || 1)) * 100}%` }}
+          />
         </div>
 
-        {/* Content (Grid Layout) */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "15px",
-            display: "flex",
-            flexWrap: "wrap",
-            content: "flex-start",
-            gap: "10px",
-          }}
-        >
-          {/* Upload Button */}
-          <div
-            onClick={actions.upload}
-            style={{
-              width: "85px",
-              height: "85px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "var(--gold)",
-              color: "#000",
-              fontWeight: "bold",
-              fontSize: "12px",
-              textAlign: "center",
-              padding: "5px",
-            }}
-          >
-            <div style={{ fontSize: "20px", marginBottom: "2px" }}>➕</div>
-            <div>{isUploading ? "上传中" : "上传"}</div>
+        {/* Control Buttons */}
+        <div className="control-buttons">
+          {/* Left Controls */}
+          <div className="control-left">
+            {isVideo && (
+              <div className="volume-control">
+                <button 
+                  className="icon-btn" 
+                  onClick={() => changeVideoVolume(videoVolume > 0 ? 0 : 1)}
+                  title={videoVolume > 0 ? "静音" : "取消静音"}
+                >
+                  {videoVolume > 0 ? icons.volume : icons.mute}
+                </button>
+                <input
+                  type="range"
+                  className="volume-slider"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={videoVolume}
+                  onChange={(e) => changeVideoVolume(Number(e.target.value))}
+                />
+              </div>
+            )}
+            <div className="time-display">
+              <span className="current">{formatTime(progress)}</span>
+              <span> / {formatTime(duration)}</span>
+            </div>
           </div>
 
-          {/* Items */}
-          {mediaList.map((item, idx) => (
-            <div
-              key={idx}
-              onClick={() => actions.select(item.url)}
-              style={{
-                width: "85px",
-                height: "85px",
-                borderRadius: "8px",
-                cursor: "pointer",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "5px",
-                boxSizing: "border-box",
-                border: "1px solid",
-                background: currentUrl === item.url ? "#444" : "#333",
-                color: currentUrl === item.url ? "var(--gold)" : "#ccc",
-                borderColor: currentUrl === item.url ? "var(--gold)" : "#444",
-                fontSize: "12px",
-                textAlign: "center",
-                overflow: "hidden",
-              }}
+          {/* Center Controls */}
+          <div className="control-center">
+            <button className="skip-btn" onClick={actions.prev} title="上一个">
+              {icons.prev}
+            </button>
+            <button className="play-btn" onClick={handleTogglePlay} title={isPlaying ? "暂停" : "播放"}>
+              {isPlaying ? icons.pause : icons.play}
+            </button>
+            <button className="skip-btn" onClick={actions.next} title="下一个">
+              {icons.next}
+            </button>
+          </div>
+
+          {/* Right Controls */}
+          <div className="control-right">
+            <button className="speed-btn" onClick={handleChangeSpeed} title="播放速度">
+              {speed}x
+            </button>
+            <button 
+              className="icon-btn" 
+              onClick={handlePlaylistToggle}
+              title="播放列表"
             >
-              <div style={{ fontSize: "20px", marginBottom: "2px" }}>
-                {icon}
-              </div>
-              <div
-                style={{
-                  width: "100%",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {item.title}
-              </div>
-            </div>
-          ))}
+              {icons.playlist}
+            </button>
+          </div>
         </div>
       </div>
     );
   };
 
   return (
-    <div className="media-overlay active">
-      <button className="media-close" onClick={actions.close}>
-        ← 返回
-      </button>
+    <div
+      ref={containerRef}
+      className="media-overlay-container"
+      onMouseMove={resetControlTimer}
+      onClick={resetControlTimer}
+    >
+      {/* Background Layer */}
+      <div className="media-backdrop" />
 
-      {/* Video Layout (Left-Right) */}
-      {type === "video" && (
-        <div
-          className="media-container active"
-          style={{
-            display: "flex",
-            width: "95%",
-            height: "90%",
-            background: "#111",
-            overflow: "hidden",
-            flexDirection: "row",
-          }}
-        >
-          {/* Player Area */}
-          <div
-            style={{
-              flex: 1,
-              background: "#000",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              position: "relative",
-            }}
-          >
-            {currentUrl ? (
-              <video
-                src={currentUrl}
-                controls
-                autoPlay
-                style={{ maxWidth: "100%", maxHeight: "100%" }}
-              />
-            ) : (
-              <div style={{ color: "#666" }}>暂无视频，请从右侧上传</div>
-            )}
-          </div>
-          {/* Playlist */}
-          <PlaylistPanel icon="🎬" />
+      {/* Top Bar */}
+      <div className={`media-top-bar ${showControls ? "visible" : "hidden"}`}>
+        <button className="back-btn" onClick={actions.close}>
+          {icons.back}
+          <span>返回</span>
+        </button>
+        <div className="media-title-display">
+          {currentItem?.title || (type === "video" ? "视频播放" : type === "audio" ? "音频播放" : "媒体查看")}
         </div>
-      )}
+        <div className="top-bar-spacer" />
+      </div>
 
-      {/* Audio Layout (Left-Right) */}
-      {type === "audio" && (
-        <div
-          className="media-container active"
-          style={{
-            display: "flex",
-            width: "90%",
-            height: "80%",
-            background: "#1a1a1a",
-            overflow: "hidden",
-            flexDirection: "row",
-            borderRadius: "12px",
-          }}
-        >
-          {/* Visualizer & Controls Area */}
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "20px",
-            }}
-          >
-            <div
-              className="audio-disc-container"
-              style={{ width: "200px", height: "200px", marginBottom: "20px" }}
-            >
-              <img
-                src={avatarSrc || "https://via.placeholder.com/150"}
-                className="audio-cover"
-              />
+      {/* Main Content Area */}
+      <div className="media-stage">
+        {/* ======== VIDEO PLAYER ======== */}
+        {type === "video" && (
+          <div className="video-player-wrapper">
+            <div className="video-stage">
+              {currentUrl ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    key={currentUrl}
+                    src={currentUrl}
+                    className="main-video"
+                    autoPlay
+                    onClick={toggleVideoPlay}
+                    onPlay={() => {
+                      setIsVideoPlaying(true);
+                      actions.setAudioPlaying(true);
+                    }}
+                    onPause={() => {
+                      setIsVideoPlaying(false);
+                      actions.setAudioPlaying(false);
+                      setShowControls(true);
+                    }}
+                    onTimeUpdate={(e) => setVideoProgress(e.currentTarget.currentTime)}
+                    onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                  />
+                </>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-icon">🎬</div>
+                  <p>暂无视频，请从右侧列表上传</p>
+                </div>
+              )}
+              
+              {/* Control Bar */}
+              {currentUrl && renderControlBar(true)}
             </div>
-            <h2
-              style={{
-                color: "var(--gold)",
-                fontSize: "18px",
-                marginBottom: "20px",
-              }}
-            >
-              {mediaList.find((i) => i.url === currentUrl)?.title ||
-                "请选择录音"}
-            </h2>
+            {renderPlaylist("🎬", true)}
+          </div>
+        )}
 
-            {/* Controls */}
-            <div
-              style={{
-                width: "80%",
-                maxWidth: "500px",
-                background: "#333",
-                padding: "20px",
-                borderRadius: "15px",
-                border: "1px solid #555",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 15,
-                  color: "#ccc",
-                  marginBottom: 15,
-                }}
-              >
-                <span style={{ minWidth: 40, fontSize: "12px" }}>
-                  {formatTime(audioState.progress)}
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={audioState.duration || 0}
-                  value={audioState.progress}
-                  onChange={(e) => actions.seekAudio(Number(e.target.value))}
-                  style={{
-                    flex: 1,
-                    height: 6,
-                    accentColor: "var(--gold)",
-                    cursor: "pointer",
-                  }}
-                />
-                <span style={{ minWidth: 40, fontSize: "12px" }}>
-                  {formatTime(audioState.duration)}
-                </span>
+        {/* ======== AUDIO PLAYER ======== */}
+        {type === "audio" && (
+          <div className="audio-player-wrapper">
+            <div className="audio-stage">
+              {/* Spinning Disc */}
+              <div className={`disc-container ${audioState.isPlaying ? "spinning" : ""}`}>
+                <div className="disc-outer">
+                  <div className="disc-art">
+                    {avatarSrc ? (
+                      <img
+                        src={avatarSrc}
+                        alt="Cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <span className="disc-icon">🎵</span>
+                    )}
+                  </div>
+                  <div className="disc-center-hole" />
+                </div>
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 30,
+
+              {/* Waveform Visualization */}
+              <div className="waveform-container">
+                {[...Array(20)].map((_, i) => (
+                  <div
+                    key={i}
+                    className={`wave-bar ${audioState.isPlaying ? "anim" : ""}`}
+                    style={{ animationDelay: `${i * 0.05}s` }}
+                  />
+                ))}
+              </div>
+
+              {/* Title */}
+              <div className="audio-title-large">
+                {currentItem?.title || "请选择录音播放"}
+              </div>
+
+              {/* Hidden Audio Element */}
+              <audio
+                ref={audioState.ref}
+                style={{ display: "none" }}
+                onPlay={() => actions.setAudioPlaying(true)}
+                onPause={() => actions.setAudioPlaying(false)}
+                onEnded={() => {
+                  actions.setAudioPlaying(false);
+                  actions.setAudioProgress(0);
                 }}
-              >
-                <button
-                  onClick={actions.changeSpeed}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid #777",
-                    color: "#fff",
-                    borderRadius: 5,
-                    padding: "5px 10px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {audioState.speed}x
-                </button>
-                <button
-                  onClick={actions.toggleAudio}
-                  style={{
-                    width: 50,
-                    height: 50,
-                    borderRadius: "50%",
-                    background: "var(--gold)",
-                    border: "none",
-                    fontSize: 24,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "black",
-                    cursor: "pointer",
-                  }}
-                >
-                  {audioState.isPlaying ? "⏸" : "▶"}
-                </button>
-                <div style={{ width: 40 }}></div>
+                onTimeUpdate={(e) =>
+                  actions.setAudioProgress(e.currentTarget.currentTime)
+                }
+                onLoadedMetadata={(e) =>
+                  actions.setAudioDuration(e.currentTarget.duration)
+                }
+              />
+
+              {/* Control Bar */}
+              {renderControlBar(false)}
+            </div>
+
+            {/* Playlist Sidebar */}
+            {renderPlaylist("🎙️")}
+          </div>
+        )}
+
+        {/* ======== PHOTO GALLERY ======== */}
+        {type === "photo" && (
+          <div className="photo-gallery-wrapper">
+            <div className="main-photo-area">
+              <button className="nav-btn prev" onClick={actions.prev}>
+                ‹
+              </button>
+              {currentUrl ? (
+                <img src={currentUrl} className="main-display-photo" alt="" />
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-icon">📷</div>
+                  <p>暂无照片</p>
+                </div>
+              )}
+              <button className="nav-btn next" onClick={actions.next}>
+                ›
+              </button>
+            </div>
+
+            <div className="photo-strip">
+              <button className="strip-upload-btn" onClick={actions.upload}>
+                <span>+</span>
+              </button>
+              <div className="strip-scroll">
+                {mediaList.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className={`strip-thumb ${
+                      currentUrl === item.url ? "active" : ""
+                    }`}
+                    onClick={() => actions.select(item.url)}
+                  >
+                    <img src={item.url} alt="" />
+                  </div>
+                ))}
               </div>
             </div>
-
-            <audio
-              ref={audioState.ref}
-              style={{ display: "none" }}
-              onPlay={() => actions.setAudioPlaying(true)}
-              onPause={() => actions.setAudioPlaying(false)}
-              onEnded={() => {
-                actions.setAudioPlaying(false);
-                actions.setAudioProgress(0);
-              }}
-              onTimeUpdate={(e) =>
-                actions.setAudioProgress(e.currentTarget.currentTime)
-              }
-              onLoadedMetadata={(e) =>
-                actions.setAudioDuration(e.currentTarget.duration)
-              }
-            />
           </div>
-
-          {/* Playlist */}
-          <PlaylistPanel icon="🎙️" />
-        </div>
-      )}
-
-      {/* Photo (保持原样) */}
-      {type === "photo" && (
-        <div
-          className="media-container active"
-          style={{ flexDirection: "column", width: "100%", height: "100%" }}
-        >
-          <div className="photo-stage">
-            <button className="photo-nav-btn nav-left" onClick={actions.prev}>
-              ‹
-            </button>
-            {currentUrl ? (
-              <img src={currentUrl} className="main-photo" alt="" />
-            ) : (
-              <div style={{ color: "#666" }}>暂无照片</div>
-            )}
-            <button className="photo-nav-btn nav-right" onClick={actions.next}>
-              ›
-            </button>
-          </div>
-          <div
-            style={{
-              height: 140,
-              background: "#222",
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              padding: "0 20px",
-              gap: 20,
-            }}
-          >
-            <button
-              onClick={actions.upload}
-              disabled={isUploading}
-              style={{
-                height: 80,
-                width: 80,
-                borderRadius: 8,
-                background: "var(--gold)",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              {isUploading ? "⏳" : "➕"}
-            </button>
-            <div className="photo-thumbnails">
-              {mediaList.map((item, idx) => (
-                <img
-                  key={idx}
-                  src={item.url}
-                  className={`thumb ${currentUrl === item.url ? "active" : ""}`}
-                  onClick={() => actions.select(item.url)}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

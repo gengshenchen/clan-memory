@@ -45,12 +45,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/app/mainwindow.cpp" line="78"/>
+        <location filename="../../src/app/mainwindow.cpp" line="79"/>
         <source>&amp;File</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/app/mainwindow.cpp" line="79"/>
+        <location filename="../../src/app/mainwindow.cpp" line="80"/>
         <source>E&amp;xit</source>
         <translation type="unfinished"></translation>
     </message>

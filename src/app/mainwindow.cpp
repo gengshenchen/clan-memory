@@ -46,8 +46,6 @@ MainWindow::MainWindow(QWidget* parent)
     ui->setupUi(this);
     setWindowTitle(tr("Clan"));
     setWindowIcon(QIcon(":/icons/app-icon.svg"));
-    setFixedWidth(800);
-    setFixedHeight(600);
     // setupMenus();
 
     // QToolBar* toolBar = addToolBar("Main");
@@ -68,6 +66,9 @@ MainWindow::MainWindow(QWidget* parent)
     Logger::instance().log("Main Window constructed and configured.");
 
     connect(m_cefView, &QCefView::invokeMethod, this, &MainWindow::onInvokeMethod);
+
+    // Start in fullscreen mode - application always stays fullscreen
+    showFullScreen();
 }
 
 MainWindow::~MainWindow() {

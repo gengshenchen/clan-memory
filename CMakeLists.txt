@@ -74,6 +74,8 @@ add_subdirectory(3rdparty/crashpad)
 #設置EXCLUDE_FROM_ALL可以防止在默認構建時編譯這些庫的測試等無關目標，加快編譯速度
 add_subdirectory(3rdparty/simpleini EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/json EXCLUDE_FROM_ALL)
+# Disable zstd support for cpp-httplib as it causes CMake configuration issues
+set(HTTPLIB_USE_ZSTD_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
 add_subdirectory(3rdparty/cpp-httplib EXCLUDE_FROM_ALL)
 set (TF_BUILD_TESTS OFF)
 add_subdirectory(3rdparty/taskflow EXCLUDE_FROM_ALL)
