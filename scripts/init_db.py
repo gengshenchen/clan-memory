@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sqlite3
 import uuid
 import os
@@ -94,9 +95,41 @@ def create_tables(conn):
         );
     """)
 
-    # 4. 索引
+    # 4. Settings Table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER
+        );
+    """)
+
+    # 5. Operation Logs Table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS operation_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            target_name TEXT,
+            changes TEXT,
+            created_at INTEGER NOT NULL
+        );
+    """)
+
+    # 6. 索引
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_members_father ON members(father_id);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_member ON media_resources(member_id);")
+
+    # 7. Default Settings
+    try:
+        # Initialize default generation names
+        default_gen_names = '["始","定","英","华","富","贵","荣","昌","盛","德","永"]'
+        now = int(datetime.now().timestamp())
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)", 
+                      ("generation_names", default_gen_names, now))
+    except Exception as e:
+        print(f"Warning initializing settings: {e}")
 
     conn.commit()
     print("Database schema created successfully.")
@@ -122,6 +155,8 @@ def init_db_from_csv(db_path, csv_path):
     try:
         cursor.execute("DELETE FROM members")
         cursor.execute("DELETE FROM media_resources")
+        cursor.execute("DELETE FROM settings")
+        cursor.execute("DELETE FROM operation_logs")
         # 如果 FTS 表存在，重建它通常会自动清理，或者手动清理
         # cursor.execute("INSERT INTO members_fts(members_fts) VALUES('rebuild')")
     except Exception as e:

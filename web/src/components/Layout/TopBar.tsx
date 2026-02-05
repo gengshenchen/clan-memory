@@ -18,7 +18,7 @@ const TopBar: React.FC<TopBarProps> = ({ onAdminClick, isAdmin, onSearch }) => {
   return (
     <div className="top-bar">
       <div className="logo">
-        <span style={{ fontSize: "24px" }}>🏛️</span> 宗族记忆
+        <span style={{ fontSize: "24px" }}>🏛️</span> 家谱
         <span className="admin-badge">管理员模式</span>
       </div>
       <div className="search-container">

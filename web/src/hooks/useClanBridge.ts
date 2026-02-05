@@ -53,6 +53,9 @@ export const useClanBridge = () => {
               ) {
                 setAvatarSrc(data.portraitPath);
               } else {
+                // CRITICAL: Reset callback before loading to ensure WE receive the response
+                // (MemberForm may have overwritten it)
+                window.onLocalImageLoaded = (_path, base64) => setAvatarSrc(base64);
                 getLocalImage(data.portraitPath);
               }
             } else {

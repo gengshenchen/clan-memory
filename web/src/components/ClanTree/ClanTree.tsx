@@ -35,24 +35,21 @@ const ClanTree = forwardRef<ClanTreeHandle, ClanTreeProps>(
     // 辅助函数：将路径转换为合法的图片 URL
     const getAvatarUrl = (path?: string) => {
       if (!path || path.trim() === "") return "";
-      if (
-        path.startsWith("http") ||
-        path.startsWith("data:") ||
-        path.startsWith("file:")
-      )
-        return path;
+      if (path.startsWith("http") || path.startsWith("data:")) return path;
+      if (path.startsWith("file:")) return `${path}?t=${Date.now()}`;
 
       const normalizedPath = path.replace(/\\/g, "/");
+      const timestamp = Date.now();
 
       if (/^[a-zA-Z]:/.test(normalizedPath)) {
-        return `file:///${normalizedPath}`;
+        return `file:///${normalizedPath}?t=${timestamp}`;
       }
 
       if (normalizedPath.startsWith("/")) {
-        return `file://${normalizedPath}`;
+        return `file://${normalizedPath}?t=${timestamp}`;
       }
 
-      return `file://${normalizedPath}`;
+      return `file://${normalizedPath}?t=${timestamp}`;
     };
 
     useEffect(() => {

@@ -1,0 +1,127 @@
+.logs-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(5px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.logs-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.logs-box {
+  background: #262626;
+  width: 900px;
+  height: 80vh;
+  border-radius: 16px;
+  border: 1px solid #444;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  transform: translateY(20px);
+  transition: transform 0.3s;
+}
+
+.logs-overlay.active .logs-box {
+  transform: translateY(0);
+}
+
+.logs-header {
+  height: 60px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  border-bottom: 1px solid #333;
+  background: #1a1a1a;
+  border-radius: 16px 16px 0 0;
+}
+
+.logs-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #e67e22;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 24px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.close-btn:hover {
+  color: white;
+}
+
+.export-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  padding: 4px 10px;
+  font-size: 16px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.export-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-color: white;
+}
+
+.logs-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #ccc;
+}
+
+.logs-table th {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #444;
+  color: #888;
+}
+
+.logs-table td {
+  padding: 12px;
+  border-bottom: 1px solid #333;
+}
+
+.logs-table tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.action-create { color: #2ecc71; }
+.action-update { color: #3498db; }
+.action-delete { color: #e74c3c; }
+
+.detail-badge {
+  background: #333;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #aaa;
+}

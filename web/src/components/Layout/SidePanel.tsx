@@ -9,6 +9,8 @@ interface SidePanelProps {
   onOpenMedia: (type: "video" | "photo" | "audio") => void;
   onReadBio: () => void;
   onUpdatePortrait: () => void;
+  isAdminMode?: boolean;
+  onEditMember?: () => void;
 }
 
 const SidePanel: React.FC<SidePanelProps> = ({
@@ -19,12 +21,29 @@ const SidePanel: React.FC<SidePanelProps> = ({
   onOpenMedia,
   onReadBio,
   onUpdatePortrait,
+  isAdminMode = false,
+  onEditMember,
 }) => {
   if (!member) return null;
 
   const getVideoLabel = () => {
     if (member.deathDate && member.deathDate.length > 0) return "观看生前影像";
     return "观看个人视频";
+  };
+
+  const handleDelete = () => {
+    if (!member) return;
+    if (!window.confirm(`确定要删除 ${member.name} 吗？`)) return;
+
+    window.onMemberDeleted = (result: any) => {
+        const success = (result === true || String(result) === "true" || (result && result.success));
+        if (success) {
+             onClose();
+        } else {
+             alert((result && result.error) || "删除失败");
+        }
+    };
+    if (window.CallBridge) window.CallBridge.invoke("deleteMember", member.id);
   };
 
   return (
@@ -38,15 +57,17 @@ const SidePanel: React.FC<SidePanelProps> = ({
         <div
           className="profile-img-lg"
           onClick={() => {
-            console.log("Avatar clicked, triggering update...");
-            onUpdatePortrait();
+            if (isAdminMode) {
+              console.log("Avatar clicked, triggering update...");
+              onUpdatePortrait();
+            }
           }}
-          title="点击更换头像"
+          title={isAdminMode ? "点击更换头像" : "头像"}
           style={{
-            cursor: "pointer",
+            cursor: isAdminMode ? "pointer" : "default",
             position: "relative",
-            pointerEvents: "auto", // 强制开启交互
-            zIndex: 10, // 提高层级
+            pointerEvents: "auto",
+            zIndex: 10,
           }}
         >
           {avatarSrc ? (
@@ -58,7 +79,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                 height: "100%",
                 objectFit: "cover",
                 pointerEvents: "none",
-              }} // 让图片透传点击
+              }}
             />
           ) : (
             <span
@@ -68,23 +89,24 @@ const SidePanel: React.FC<SidePanelProps> = ({
             </span>
           )}
 
-          {/* 增加一个明显的 hover 遮罩层提示 */}
-          <div
-            className="avatar-hover-hint"
-            style={{
-              position: "absolute",
-              bottom: 0,
-              width: "100%",
-              background: "rgba(0,0,0,0.6)",
-              color: "white",
-              fontSize: "10px",
-              textAlign: "center",
-              padding: "2px 0",
-              pointerEvents: "none",
-            }}
-          >
-            更换
-          </div>
+          {isAdminMode && (
+            <div
+              className="avatar-hover-hint"
+              style={{
+                position: "absolute",
+                bottom: 0,
+                width: "100%",
+                background: "rgba(0,0,0,0.6)",
+                color: "white",
+                fontSize: "10px",
+                textAlign: "center",
+                padding: "2px 0",
+                pointerEvents: "none",
+              }}
+            >
+              更换
+            </div>
+          )}
         </div>
 
         <h2 className="profile-name">{member.name}</h2>
@@ -152,6 +174,19 @@ const SidePanel: React.FC<SidePanelProps> = ({
           <span style={{ fontSize: "18px" }}>→</span>
         </div>
       </div>
+
+      {isAdminMode && (
+        <div className="action-grid admin-actions" style={{ marginTop: "30px" }}>
+          <div className="action-btn" onClick={onEditMember} style={{ background: '#2c5282', borderColor: '#4299e1' }}>
+             <i style={{ fontSize: '24px', fontStyle: 'normal' }}>✏️</i>
+             <span>编辑信息</span>
+          </div>
+          <div className="action-btn" onClick={handleDelete} style={{ background: '#742a2a', borderColor: '#e53e3e' }}>
+             <i style={{ fontSize: '24px', fontStyle: 'normal' }}>🗑️</i>
+             <span>删除成员</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

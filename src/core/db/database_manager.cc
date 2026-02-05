@@ -1,12 +1,12 @@
 #include "core/db/database_manager.h"
 
-#include <iostream>
-#include <filesystem>
-#include <vector>
+#include <SQLiteCpp/SQLiteCpp.h>
+
 #include <chrono>
 #include <cstdint>
-
-#include <SQLiteCpp/SQLiteCpp.h>
+#include <filesystem>
+#include <iostream>
+#include <vector>
 
 #include "core/log/log.h"
 #include "core/platform/path_manager.h"
@@ -14,7 +14,6 @@
 namespace clan::core {
 
 namespace fs = std::filesystem;
-
 
 DatabaseManager::DatabaseManager() {
 }
@@ -39,8 +38,8 @@ void DatabaseManager::Initialize(const std::string& dbPath) {
 
     try {
         // Open database (Read/Write | Create if missing)
-        db_ = std::make_unique<SQLite::Database>(
-            dbPath, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+        db_ = std::make_unique<SQLite::Database>(dbPath,
+                                                 SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
 
         LOGINFO("[DB] Database opened at: {}", dbPath);
 
@@ -59,7 +58,8 @@ void DatabaseManager::Initialize(const std::string& dbPath) {
 }
 
 void DatabaseManager::CreateTables() {
-    if (!db_) return;
+    if (!db_)
+        return;
 
     try {
         SQLite::Transaction transaction(*db_);
@@ -129,9 +129,47 @@ void DatabaseManager::CreateTables() {
             );
         )");
 
+        // 4. Settings Table
+        db_->exec(R"(
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at INTEGER
+            );
+        )");
+
+        // 5. Operation Logs Table
+        db_->exec(R"(
+            CREATE TABLE IF NOT EXISTS operation_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                target_name TEXT,
+                changes TEXT,
+                created_at INTEGER NOT NULL
+            );
+        )");
+
         // Create Indexes
         db_->exec("CREATE INDEX IF NOT EXISTS idx_members_father ON members(father_id);");
         db_->exec("CREATE INDEX IF NOT EXISTS idx_media_member ON media_resources(member_id);");
+        db_->exec(
+            "CREATE INDEX IF NOT EXISTS idx_logs_created ON operation_logs(created_at DESC);");
+
+        // Initialize default generation names if not exist
+        SQLite::Statement checkSetting(
+            *db_, "SELECT COUNT(*) FROM settings WHERE key = 'generation_names'");
+        if (checkSetting.executeStep() && checkSetting.getColumn(0).getInt() == 0) {
+            db_->exec(R"(
+                INSERT INTO settings (key, value, updated_at) VALUES (
+                    'generation_names',
+                    '["始","定","英","华","富","贵","荣","昌","盛","德","永"]',
+                    0
+                );
+            )");
+            LOGINFO("[DB] Initialized default generation names.");
+        }
 
         transaction.commit();
         LOGINFO("[DB] Tables initialized successfully.");
@@ -142,10 +180,12 @@ void DatabaseManager::CreateTables() {
 }
 
 void DatabaseManager::CheckFTSSupport() {
-    if (!db_) return;
+    if (!db_)
+        return;
     try {
         // Simple check query
-        SQLite::Statement query(*db_, "SELECT count(*) FROM members_fts WHERE members_fts MATCH 'test'");
+        SQLite::Statement query(*db_,
+                                "SELECT count(*) FROM members_fts WHERE members_fts MATCH 'test'");
         LOGINFO("[DB] FTS5 is active.");
     } catch (std::exception& e) {
         LOGWARN("[DB] FTS5 check failed (Msg: {}). Search might be limited.", e.what());
@@ -159,7 +199,8 @@ void DatabaseManager::CheckFTSSupport() {
 std::vector<Member> DatabaseManager::GetAllMembers() {
     std::lock_guard<std::mutex> lock(db_mutex_);
     std::vector<Member> result;
-    if (!db_) return result;
+    if (!db_)
+        return result;
 
     try {
         SQLite::Statement query(*db_, "SELECT * FROM members ORDER BY generation ASC");
@@ -199,7 +240,8 @@ std::vector<Member> DatabaseManager::GetAllMembers() {
 Member DatabaseManager::GetMemberById(const std::string& id) {
     std::lock_guard<std::mutex> lock(db_mutex_);
     Member m;
-    if (!db_) return m;
+    if (!db_)
+        return m;
 
     try {
         SQLite::Statement query(*db_, "SELECT * FROM members WHERE id = ?");
@@ -235,7 +277,8 @@ Member DatabaseManager::GetMemberById(const std::string& id) {
 std::vector<Member> DatabaseManager::SearchMembers(const std::string& keyword) {
     std::lock_guard<std::mutex> lock(db_mutex_);
     std::vector<Member> result;
-    if (!db_) return result;
+    if (!db_)
+        return result;
 
     try {
         // Hybrid Search:
@@ -243,7 +286,7 @@ std::vector<Member> DatabaseManager::SearchMembers(const std::string& keyword) {
         // 2. Full-text search on bio (FTS)
         // Note: FTS syntax usually requires sanitization.
         // Simple implementation:
-        std::string ftsQuery = "\"" + keyword + "\""; // Exact phrase search
+        std::string ftsQuery = "\"" + keyword + "\"";  // Exact phrase search
 
         SQLite::Statement query(*db_, R"(
             SELECT m.* FROM members m
@@ -267,7 +310,8 @@ std::vector<Member> DatabaseManager::SearchMembers(const std::string& keyword) {
     return result;
 }
 
-bool DatabaseManager::UpdateMemberPortrait(const std::string& memberId, const std::string& portraitPath) {
+bool DatabaseManager::UpdateMemberPortrait(const std::string& memberId,
+                                           const std::string& portraitPath) {
     std::lock_guard<std::mutex> lock(db_mutex_);
     if (!db_) {
         LOGERROR("[DB] Database not initialized.");
@@ -289,7 +333,8 @@ bool DatabaseManager::UpdateMemberPortrait(const std::string& memberId, const st
             LOGINFO("[DB] Updated portrait for member {}: {}", memberId, portraitPath);
             return true;
         } else {
-            LOGWARN("[DB] Update portrait failed: Member {} not found or path unchanged.", memberId);
+            LOGWARN("[DB] Update portrait failed: Member {} not found or path unchanged.",
+                    memberId);
             return false;
         }
 
@@ -302,7 +347,8 @@ bool DatabaseManager::UpdateMemberPortrait(const std::string& memberId, const st
 // Insert a new media resource record
 void DatabaseManager::AddMediaResource(const MediaResource& res) {
     std::lock_guard<std::mutex> lock(db_mutex_);
-    if (!db_) return;
+    if (!db_)
+        return;
 
     try {
         // Using REPLACE to handle potential duplicate IDs if logic changes
@@ -326,7 +372,8 @@ void DatabaseManager::AddMediaResource(const MediaResource& res) {
         // Use current timestamp if not provided
         // Explicit type int64_t for 'now'
         int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
+                          std::chrono::system_clock::now().time_since_epoch())
+                          .count();
         query.bind(9, now);
 
         query.exec();
@@ -341,7 +388,8 @@ std::vector<MediaResource> DatabaseManager::GetMediaResources(const std::string&
                                                               const std::string& type) {
     std::lock_guard<std::mutex> lock(db_mutex_);
     std::vector<MediaResource> list;
-    if (!db_) return list;
+    if (!db_)
+        return list;
 
     try {
         SQLite::Statement query(*db_, R"(
@@ -379,4 +427,238 @@ std::vector<MediaResource> DatabaseManager::GetMediaResources(const std::string&
     return list;
 }
 
-} // namespace clan::core
+bool DatabaseManager::DeleteMediaResource(const std::string& resourceId) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_)
+        return false;
+
+    try {
+        SQLite::Statement query(*db_, "DELETE FROM media_resources WHERE id = ?");
+        query.bind(1, resourceId);
+        query.exec();
+        return true;
+    } catch (std::exception& e) {
+        LOGERROR("[DB] DeleteMediaResource failed: {}", e.what());
+        return false;
+    }
+}
+
+// Save (insert or update) a member
+void DatabaseManager::SaveMember(const Member& m) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_)
+        return;
+
+    try {
+        // Check if member exists
+        SQLite::Statement checkQuery(*db_, "SELECT id FROM members WHERE id = ?");
+        checkQuery.bind(1, m.id);
+        bool exists = checkQuery.executeStep();
+
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+                          std::chrono::system_clock::now().time_since_epoch())
+                          .count();
+
+        if (exists) {
+            // Update existing member
+            SQLite::Statement query(*db_, R"(
+                UPDATE members SET
+                    name = ?, gender = ?, generation = ?, generation_name = ?,
+                    father_id = ?, spouse_name = ?, mother_id = ?,
+                    birth_date = ?, death_date = ?, birth_place = ?, death_place = ?,
+                    portrait_path = ?, bio = ?, updated_at = ?
+                WHERE id = ?
+            )");
+            query.bind(1, m.name);
+            query.bind(2, m.gender);
+            query.bind(3, m.generation);
+            query.bind(4, m.generation_name);
+            query.bind(5, m.father_id);
+            query.bind(6, m.spouse_name);
+            query.bind(7, m.mother_id);
+            query.bind(8, m.birth_date);
+            query.bind(9, m.death_date);
+            query.bind(10, m.birth_place);
+            query.bind(11, m.death_place);
+            query.bind(12, m.portrait_path);
+            query.bind(13, m.bio);
+            query.bind(14, now);
+            query.bind(15, m.id);
+            query.exec();
+            LOGINFO("[DB] Updated member: {} (id={})", m.name, m.id);
+        } else {
+            // Insert new member
+            SQLite::Statement query(*db_, R"(
+                INSERT INTO members (id, name, gender, generation, generation_name,
+                    father_id, spouse_name, mother_id, birth_date, death_date,
+                    birth_place, death_place, portrait_path, bio, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            )");
+            query.bind(1, m.id);
+            query.bind(2, m.name);
+            query.bind(3, m.gender);
+            query.bind(4, m.generation);
+            query.bind(5, m.generation_name);
+            query.bind(6, m.father_id);
+            query.bind(7, m.spouse_name);
+            query.bind(8, m.mother_id);
+            query.bind(9, m.birth_date);
+            query.bind(10, m.death_date);
+            query.bind(11, m.birth_place);
+            query.bind(12, m.death_place);
+            query.bind(13, m.portrait_path);
+            query.bind(14, m.bio);
+            query.bind(15, now);
+            query.bind(16, now);
+            query.exec();
+            LOGINFO("[DB] Inserted new member: {} (id={})", m.name, m.id);
+        }
+    } catch (std::exception& e) {
+        LOGERROR("[DB] SaveMember failed: {}", e.what());
+    }
+}
+
+// Check if a member has children
+bool DatabaseManager::HasChildren(const std::string& memberId) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_)
+        return false;
+
+    try {
+        SQLite::Statement query(*db_, "SELECT COUNT(*) FROM members WHERE father_id = ?");
+        query.bind(1, memberId);
+        if (query.executeStep()) {
+            return query.getColumn(0).getInt() > 0;
+        }
+    } catch (std::exception& e) {
+        LOGERROR("[DB] HasChildren failed: {}", e.what());
+    }
+    return false;
+}
+
+// Delete a member
+bool DatabaseManager::DeleteMember(const std::string& memberId) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_)
+        return false;
+
+    try {
+        SQLite::Statement query(*db_, "DELETE FROM members WHERE id = ?");
+        query.bind(1, memberId);
+        int rows = query.exec();
+        if (rows > 0) {
+            LOGINFO("[DB] Deleted member: {}", memberId);
+            return true;
+        }
+    } catch (std::exception& e) {
+        LOGERROR("[DB] DeleteMember failed: {}", e.what());
+    }
+    return false;
+}
+
+// Get a setting value
+std::string DatabaseManager::GetSetting(const std::string& key) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_)
+        return "";
+
+    try {
+        SQLite::Statement query(*db_, "SELECT value FROM settings WHERE key = ?");
+        query.bind(1, key);
+        if (query.executeStep()) {
+            return query.getColumn(0).getText();
+        }
+    } catch (std::exception& e) {
+        LOGERROR("[DB] GetSetting failed: {}", e.what());
+    }
+    return "";
+}
+
+// Save a setting value
+void DatabaseManager::SaveSetting(const std::string& key, const std::string& value) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_)
+        return;
+
+    try {
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+                          std::chrono::system_clock::now().time_since_epoch())
+                          .count();
+
+        SQLite::Statement query(*db_, R"(
+            INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+        )");
+        query.bind(1, key);
+        query.bind(2, value);
+        query.bind(3, now);
+        query.exec();
+        LOGINFO("[DB] Saved setting: {}", key);
+    } catch (std::exception& e) {
+        LOGERROR("[DB] SaveSetting failed: {}", e.what());
+    }
+}
+
+// Add an operation log entry
+void DatabaseManager::AddOperationLog(const std::string& action, const std::string& targetType,
+                                      const std::string& targetId, const std::string& targetName,
+                                      const std::string& changes) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    if (!db_)
+        return;
+
+    try {
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+                          std::chrono::system_clock::now().time_since_epoch())
+                          .count();
+
+        SQLite::Statement query(*db_, R"(
+            INSERT INTO operation_logs (action, target_type, target_id, target_name, changes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        )");
+        query.bind(1, action);
+        query.bind(2, targetType);
+        query.bind(3, targetId);
+        query.bind(4, targetName);
+        query.bind(5, changes);
+        query.bind(6, now);
+        query.exec();
+        LOGINFO("[DB] Added operation log: {} {} {}", action, targetType, targetName);
+    } catch (std::exception& e) {
+        LOGERROR("[DB] AddOperationLog failed: {}", e.what());
+    }
+}
+
+// Get operation logs
+std::vector<OperationLog> DatabaseManager::GetOperationLogs(int limit, int offset) {
+    std::lock_guard<std::mutex> lock(db_mutex_);
+    std::vector<OperationLog> logs;
+    if (!db_)
+        return logs;
+
+    try {
+        SQLite::Statement query(*db_, R"(
+            SELECT * FROM operation_logs ORDER BY created_at DESC LIMIT ? OFFSET ?
+        )");
+        query.bind(1, limit);
+        query.bind(2, offset);
+
+        while (query.executeStep()) {
+            OperationLog log;
+            log.id = query.getColumn("id").getInt();
+            log.action = query.getColumn("action").getText();
+            log.target_type = query.getColumn("target_type").getText();
+            log.target_id = query.getColumn("target_id").getText();
+            if (!query.getColumn("target_name").isNull())
+                log.target_name = query.getColumn("target_name").getText();
+            if (!query.getColumn("changes").isNull())
+                log.changes = query.getColumn("changes").getText();
+            log.created_at = query.getColumn("created_at").getInt64();
+            logs.push_back(log);
+        }
+    } catch (std::exception& e) {
+        LOGERROR("[DB] GetOperationLogs failed: {}", e.what());
+    }
+    return logs;
+}
+
+}  // namespace clan::core

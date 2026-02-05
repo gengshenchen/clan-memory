@@ -22,13 +22,19 @@
 <context>
     <name>JsBridge</name>
     <message>
-        <location filename="../../src/app/js_bridge.cpp" line="229"/>
+        <location filename="../../src/app/js_bridge.cpp" line="248"/>
         <source>选择头像 (Select Portrait)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/app/js_bridge.cpp" line="231"/>
+        <location filename="../../src/app/js_bridge.cpp" line="250"/>
+        <location filename="../../src/app/js_bridge.cpp" line="403"/>
         <source>Images (*.png *.jpg *.jpeg *.bmp)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/js_bridge.cpp" line="401"/>
+        <source>选择文件 (Select File)</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

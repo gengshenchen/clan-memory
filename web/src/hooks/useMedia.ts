@@ -155,6 +155,28 @@ export const useMedia = (selectedMember: FamilyMember | null) => {
     setCurrentMediaUrl(mediaList[prevIndex].url);
   };
 
+      const deleteMedia = (resourceId: string) => {
+    if (!window.confirm("确定删除该媒体资源吗？")) return;
+
+    window.onMediaResourceDeleted = (result: any) => {
+        const success = (result === true || String(result) === "true" || (result && result.success));
+        if (success) {
+          setMediaList((prev) => prev.filter((item) => item.id !== resourceId));
+          const deletedItem = mediaList.find((i) => i.id === resourceId);
+          if (deletedItem && currentMediaUrl === deletedItem.url) {
+            setCurrentMediaUrl("");
+            setIsPlayingAudio(false);
+          }
+        } else {
+          alert("删除失败");
+        }
+    };
+
+    if (window.CallBridge) {
+        window.CallBridge.invoke("deleteMediaResource", resourceId);
+    }
+  };
+
   // Audio Controls
   const toggleAudio = () => {
     if (!audioRef.current) return;
@@ -192,6 +214,7 @@ export const useMedia = (selectedMember: FamilyMember | null) => {
       openMedia,
       closeMedia,
       uploadMedia,
+      deleteMedia, // New action
       next: handleNextPhoto, // [Fix] 绑定方法
       prev: handlePrevPhoto, // [Fix] 绑定方法
       toggleAudio,

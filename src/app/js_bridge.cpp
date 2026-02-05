@@ -1,16 +1,17 @@
 #include "js_bridge.h"
 
+#include <QApplication>
+#include <QBuffer>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
-#include <QImage>
-#include <QBuffer>
-#include <QFileInfo>
-#include <QDir>
-#include <QFileDialog>
-#include <QApplication>
 #include <QStandardPaths>
+#include <QUuid>
 
 #include "core/db/database_manager.h"
 #include "core/log/log.h"
@@ -27,7 +28,7 @@ void JsBridge::test(const QString& message) {
 }
 
 QString JsBridge::fetchFamilyTree() {
-  auto& db = clan::core::DatabaseManager::instance();
+    auto& db = clan::core::DatabaseManager::instance();
     auto members = db.GetAllMembers();
 
     QJsonArray jsonArray;
@@ -152,27 +153,25 @@ QString JsBridge::searchMembers(const QString& keyword) {
 }
 
 QString JsBridge::importResource(const QString& memberId, const QString& type) {
-    if (memberId.isEmpty()) return "{\"error\": \"No member ID\"}";
+    if (memberId.isEmpty())
+        return "{\"error\": \"No member ID\"}";
 
     QString filter;
-    if (type == "video") filter = "Videos (*.mp4 *.avi *.mov *.mkv *.webm)";
-    else if (type == "photo") filter = "Images (*.png *.jpg *.jpeg *.bmp)";
-    else if (type == "audio") filter = "Audio (*.mp3 *.wav *.aac)";
+    if (type == "video")
+        filter = "Videos (*.mp4 *.avi *.mov *.mkv *.webm)";
+    else if (type == "photo")
+        filter = "Images (*.png *.jpg *.jpeg *.bmp)";
+    else if (type == "audio")
+        filter = "Audio (*.mp3 *.wav *.aac)";
 
     QString filePath = QFileDialog::getOpenFileName(
-        nullptr,
-        QString("Select %1 for Import").arg(type),
-        QDir::homePath(),
-        filter
-    );
+        nullptr, QString("Select %1 for Import").arg(type), QDir::homePath(), filter);
 
-    if (filePath.isEmpty()) return "{\"status\": \"cancelled\"}";
+    if (filePath.isEmpty())
+        return "{\"status\": \"cancelled\"}";
 
     auto res = clan::core::ResourceManager::instance().ImportFile(
-        filePath.toStdString(),
-        memberId.toStdString(),
-        type.toStdString()
-    );
+        filePath.toStdString(), memberId.toStdString(), type.toStdString());
 
     if (res.id.empty()) {
         return "{\"error\": \"Import failed\"}";
@@ -188,9 +187,8 @@ QString JsBridge::importResource(const QString& memberId, const QString& type) {
 }
 
 QString JsBridge::fetchMemberResources(const QString& memberId, const QString& type) {
-    auto list = clan::core::DatabaseManager::instance().GetMediaResources(
-        memberId.toStdString(), type.toStdString()
-    );
+    auto list = clan::core::DatabaseManager::instance().GetMediaResources(memberId.toStdString(),
+                                                                          type.toStdString());
 
     auto& paths = clan::core::PathManager::instance();
     std::filesystem::path mediaDir = paths.resources_dir();
@@ -217,6 +215,27 @@ QString JsBridge::fetchMemberResources(const QString& memberId, const QString& t
     QJsonDocument doc(jsonArray);
     return doc.toJson(QJsonDocument::Compact);
 }
+QString JsBridge::deleteMediaResource(const QString& resourceId) {
+    if (resourceId.isEmpty()) {
+        QJsonObject result;
+        result["success"] = false;
+        result["error"] = "Invalid Resource ID";
+        return QJsonDocument(result).toJson(QJsonDocument::Compact);
+    }
+
+    bool success =
+        clan::core::DatabaseManager::instance().DeleteMediaResource(resourceId.toStdString());
+
+    if (success) {
+        clan::core::DatabaseManager::instance().AddOperationLog(
+            "DELETE", "media", resourceId.toStdString(), "MediaResource", "");
+    }
+
+    QJsonObject result;
+    result["success"] = success;
+    return QJsonDocument(result).toJson(QJsonDocument::Compact);
+}
+
 void JsBridge::updateMemberPortrait(const QString& memberId) {
     if (memberId.isEmpty()) {
         return;
@@ -231,15 +250,13 @@ void JsBridge::updateMemberPortrait(const QString& memberId) {
         tr("Images (*.png *.jpg *.jpeg *.bmp)"));
 
     if (fileName.isEmpty()) {
-        return; // 用户取消了选择
+        return;  // 用户取消了选择
     }
 
     // 2. 更新数据库
     // 注意：DatabaseManager 需要支持 UpdateMemberPortrait 方法
-    bool success =clan::core::DatabaseManager::instance().UpdateMemberPortrait(
-        memberId.toStdString(),
-        fileName.toStdString()
-    );
+    bool success = clan::core::DatabaseManager::instance().UpdateMemberPortrait(
+        memberId.toStdString(), fileName.toStdString());
 
     if (success) {
         qDebug() << "Portrait updated for member:" << memberId << "Path:" << fileName;
@@ -250,4 +267,140 @@ void JsBridge::updateMemberPortrait(const QString& memberId) {
     } else {
         qWarning() << "Failed to update portrait in database.";
     }
+}
+
+QString JsBridge::saveMember(const QString& memberJson) {
+    auto& db = clan::core::DatabaseManager::instance();
+
+    QJsonDocument doc = QJsonDocument::fromJson(memberJson.toUtf8());
+    if (!doc.isObject()) {
+        return "{\"error\": \"Invalid JSON\"}";
+    }
+
+    QJsonObject obj = doc.object();
+
+    clan::core::Member m;
+    m.id = obj["id"].toString().toStdString();
+    m.name = obj["name"].toString().toStdString();
+    m.gender = obj["gender"].toString().toStdString();
+    m.generation = obj["generation"].toInt(1);
+    m.generation_name = obj["generationName"].toString().toStdString();
+    m.father_id = obj["parentId"].toString().toStdString();
+    m.mother_id = obj["motherId"].toString().toStdString();
+    m.spouse_name = obj["spouseName"].toString().toStdString();
+    m.birth_date = obj["birthDate"].toString().toStdString();
+    m.death_date = obj["deathDate"].toString().toStdString();
+    m.birth_place = obj["birthPlace"].toString().toStdString();
+    m.death_place = obj["deathPlace"].toString().toStdString();
+    m.portrait_path = obj["portraitPath"].toString().toStdString();
+    m.bio = obj["bio"].toString().toStdString();
+
+    // Generate new ID if not provided
+    if (m.id.empty()) {
+        m.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
+
+    // Determine if this is create or update
+    bool isNew = obj["isNew"].toBool(false);
+    std::string action = isNew ? "CREATE" : "UPDATE";
+
+    try {
+        db.SaveMember(m);
+
+        // Log the operation
+        db.AddOperationLog(action, "member", m.id, m.name, memberJson.toStdString());
+
+        QJsonObject result;
+        result["success"] = true;
+        result["id"] = QString::fromStdString(m.id);
+        result["action"] = QString::fromStdString(action);
+
+        return QJsonDocument(result).toJson(QJsonDocument::Compact);
+    } catch (std::exception& e) {
+        QJsonObject error;
+        error["error"] = QString::fromStdString(e.what());
+        return QJsonDocument(error).toJson(QJsonDocument::Compact);
+    }
+}
+
+QString JsBridge::deleteMember(const QString& memberId) {
+    auto& db = clan::core::DatabaseManager::instance();
+
+    // Check for children first
+    if (db.HasChildren(memberId.toStdString())) {
+        QJsonObject result;
+        result["success"] = false;
+        result["error"] = "该成员有后代，无法删除";
+        result["hasChildren"] = true;
+        return QJsonDocument(result).toJson(QJsonDocument::Compact);
+    }
+
+    // Get member name for logging
+    auto member = db.GetMemberById(memberId.toStdString());
+    std::string memberName = member.name;
+
+    bool success = db.DeleteMember(memberId.toStdString());
+
+    if (success) {
+        // Log the operation
+        db.AddOperationLog("DELETE", "member", memberId.toStdString(), memberName, "");
+    }
+
+    QJsonObject result;
+    result["success"] = success;
+    if (!success) {
+        result["error"] = "删除失败";
+    }
+    return QJsonDocument(result).toJson(QJsonDocument::Compact);
+}
+
+QString JsBridge::getSettings(const QString& key) {
+    auto& db = clan::core::DatabaseManager::instance();
+    std::string value = db.GetSetting(key.toStdString());
+
+    // For generation_names, return the JSON array directly
+    if (key == "generation_names" && !value.empty()) {
+        return QString::fromStdString(value);
+    }
+
+    QJsonObject result;
+    result["key"] = key;
+    result["value"] = QString::fromStdString(value);
+    return QJsonDocument(result).toJson(QJsonDocument::Compact);
+}
+
+void JsBridge::saveSettings(const QString& key, const QString& value) {
+    auto& db = clan::core::DatabaseManager::instance();
+    db.SaveSetting(key.toStdString(), value.toStdString());
+}
+
+QString JsBridge::getOperationLogs(int limit, int offset) {
+    auto& db = clan::core::DatabaseManager::instance();
+    auto logs = db.GetOperationLogs(limit, offset);
+
+    QJsonArray jsonArray;
+    for (const auto& log : logs) {
+        QJsonObject obj;
+        obj["id"] = log.id;
+        obj["action"] = QString::fromStdString(log.action);
+        obj["targetType"] = QString::fromStdString(log.target_type);
+        obj["targetId"] = QString::fromStdString(log.target_id);
+        obj["targetName"] = QString::fromStdString(log.target_name);
+        obj["changes"] = QString::fromStdString(log.changes);
+        obj["createdAt"] = static_cast<qint64>(log.created_at);
+        jsonArray.append(obj);
+    }
+
+    return QJsonDocument(jsonArray).toJson(QJsonDocument::Compact);
+}
+
+QString JsBridge::selectFile(const QString& filter) {
+    // Open file dialog without saving - just return path
+    QString fileName = QFileDialog::getOpenFileName(
+        nullptr,
+        tr("选择文件 (Select File)"),
+        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation),
+        filter.isEmpty() ? tr("Images (*.png *.jpg *.jpeg *.bmp)") : filter);
+
+    return fileName;  // Empty if cancelled
 }

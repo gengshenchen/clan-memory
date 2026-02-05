@@ -27,8 +27,10 @@ interface MediaPlayerProps {
     setAudioPlaying: (p: boolean) => void;
     setAudioProgress: (t: number) => void;
     setAudioDuration: (d: number) => void;
+    deleteMedia: (id: string) => void;
   };
   avatarSrc: string;
+  isAdminMode?: boolean;
 }
 
 const MediaPlayer: React.FC<MediaPlayerProps> = ({
@@ -40,6 +42,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   audioState,
   actions,
   avatarSrc,
+  isAdminMode = false,
 }) => {
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(true);
   const [showControls, setShowControls] = useState(true);
@@ -197,15 +200,17 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         </h3>
       </div>
 
-      <div className="playlist-content">
-        <button
-          className="upload-card"
-          onClick={actions.upload}
-          disabled={isUploading}
-        >
-          <span className="upload-icon">{isUploading ? "⏳" : "➕"}</span>
-          <span>上传{isVideo ? "视频" : "录音"}</span>
-        </button>
+        <div className="playlist-content">
+          {isAdminMode && (
+            <button
+              className="upload-card"
+              onClick={actions.upload}
+              disabled={isUploading}
+            >
+              <span className="upload-icon">{isUploading ? "⏳" : "➕"}</span>
+              <span>上传{isVideo ? "视频" : "录音"}</span>
+            </button>
+          )}
 
         {mediaList.map((item, idx) => (
           <div
@@ -378,7 +383,18 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         <div className="media-title-display">
           {currentItem?.title || (type === "video" ? "视频播放" : type === "audio" ? "音频播放" : "媒体查看")}
         </div>
-        <div className="top-bar-spacer" />
+        <div className="top-bar-spacer">
+          {isAdminMode && currentItem && (
+            <button
+              className="icon-btn"
+              style={{ color: "#ff4d4f", marginLeft: "auto" }}
+              onClick={() => actions.deleteMedia(currentItem.id)}
+              title="删除此资源"
+            >
+              🗑️
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Content Area */}
@@ -412,7 +428,11 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
               ) : (
                 <div className="empty-state">
                   <div className="empty-icon">🎬</div>
-                  <p>暂无视频，请从右侧列表上传</p>
+                  <p>
+                    {isAdminMode
+                      ? "暂无视频，请从右侧列表上传"
+                      : "暂无视频"}
+                  </p>
                 </div>
               )}
               
@@ -511,9 +531,11 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
             </div>
 
             <div className="photo-strip">
-              <button className="strip-upload-btn" onClick={actions.upload}>
-                <span>+</span>
-              </button>
+              {isAdminMode && (
+                <button className="strip-upload-btn" onClick={actions.upload}>
+                  <span>+</span>
+                </button>
+              )}
               <div className="strip-scroll">
                 {mediaList.map((item, idx) => (
                   <div

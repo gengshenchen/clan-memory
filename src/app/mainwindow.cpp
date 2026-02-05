@@ -355,5 +355,119 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
 
             qInfo() << "[C++] Portrait updated, refreshed UI for member:" << memberId;
         }
+    } else if (method == "saveMember") {
+        if (!arguments.isEmpty()) {
+            QString memberJson = arguments.first().toString();
+            qInfo() << "[C++] Dispatching saveMember";
+
+            QString resultJson = m_jsBridge->saveMember(memberJson);
+
+            // 回调前端
+            QString jsCode =
+                QString("if(window.onMemberSaved) { window.onMemberSaved(%1); }").arg(resultJson);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, jsCode, "");
+            }
+
+            // 刷新族谱树
+            QString treeJson = m_jsBridge->fetchFamilyTree();
+            QString treeJs =
+                QString(
+                    "if(window.onFamilyTreeDataReceived) { window.onFamilyTreeDataReceived(%1); }")
+                    .arg(treeJson);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, treeJs, "");
+            }
+        }
+    } else if (method == "deleteMember") {
+        if (!arguments.isEmpty()) {
+            QString memberId = arguments.first().toString();
+            qInfo() << "[C++] Dispatching deleteMember for ID:" << memberId;
+
+            QString resultJson = m_jsBridge->deleteMember(memberId);
+
+            // 回调前端
+            QString jsCode = QString("if(window.onMemberDeleted) { window.onMemberDeleted(%1); }")
+                                 .arg(resultJson);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, jsCode, "");
+            }
+
+            // 刷新族谱树
+            QString treeJson = m_jsBridge->fetchFamilyTree();
+            QString treeJs =
+                QString(
+                    "if(window.onFamilyTreeDataReceived) { window.onFamilyTreeDataReceived(%1); }")
+                    .arg(treeJson);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, treeJs, "");
+            }
+        }
+    } else if (method == "deleteMediaResource") {
+        if (!arguments.isEmpty()) {
+            QString resourceId = arguments.first().toString();
+            qInfo() << "[C++] Dispatching deleteMediaResource for ID:" << resourceId;
+
+            QString resultJson = m_jsBridge->deleteMediaResource(resourceId);
+
+            // 回调前端
+            QString jsCode =
+                QString("if(window.onMediaResourceDeleted) { window.onMediaResourceDeleted(%1); }")
+                    .arg(resultJson);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, jsCode, "");
+            }
+        }
+    } else if (method == "getSettings") {
+        if (!arguments.isEmpty()) {
+            QString key = arguments.first().toString();
+            QString resultJson = m_jsBridge->getSettings(key);
+
+            QString jsCode =
+                QString("if(window.onSettingsReceived) { window.onSettingsReceived('%1', %2); }")
+                    .arg(key)
+                    .arg(resultJson);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, jsCode, "");
+            }
+        }
+    } else if (method == "saveSettings") {
+        if (arguments.size() >= 2) {
+            QString key = arguments.at(0).toString();
+            QString value = arguments.at(1).toString();
+            m_jsBridge->saveSettings(key, value);
+        }
+    } else if (method == "getOperationLogs") {
+        int limit = 100;
+        int offset = 0;
+        if (arguments.size() >= 1) {
+            limit = arguments.at(0).toInt();
+        }
+        if (arguments.size() >= 2) {
+            offset = arguments.at(1).toInt();
+        }
+
+        QString resultJson = m_jsBridge->getOperationLogs(limit, offset);
+
+        QString jsCode =
+            QString("if(window.onOperationLogsReceived) { window.onOperationLogsReceived(%1); }")
+                .arg(resultJson);
+        if (m_cefView) {
+            m_cefView->executeJavascript(frameId, jsCode, "");
+        }
+    } else if (method == "selectFile") {
+        QString filter = "";
+        if (!arguments.isEmpty()) {
+            filter = arguments.first().toString();
+        }
+
+        QString filePath = m_jsBridge->selectFile(filter);
+
+        // 回调前端，传递选中的文件路径
+        QString jsCode = QString("if(window.onFileSelected) { window.onFileSelected('%1'); }")
+                             .arg(filePath.replace("'", "\\'"));  // Escape single quotes in path
+        if (m_cefView) {
+            m_cefView->executeJavascript(frameId, jsCode, "");
+        }
     }
 }

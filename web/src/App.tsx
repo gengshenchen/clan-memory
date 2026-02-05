@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import "./App.css";
 
 import { useClanBridge } from "./hooks/useClanBridge";
@@ -7,6 +7,8 @@ import ClanTree, { type ClanTreeHandle } from "./components/ClanTree/ClanTree";
 import TopBar from "./components/Layout/TopBar";
 import SidePanel from "./components/Layout/SidePanel";
 import MediaPlayer from "./components/Media/MediaPlayer";
+import { MemberForm } from "./components/Admin/MemberForm";
+import { OperationLogs } from "./components/Admin/OperationLogs";
 import { type FamilyMember } from "./types";
 
 function App() {
@@ -24,11 +26,31 @@ function App() {
 
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState("admin");
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isFullBioOpen, setIsFullBioOpen] = useState(false);
+  const [isLogsOpen, setIsLogsOpen] = useState(false);
+
+  // Member form states
+  const [isMemberFormOpen, setIsMemberFormOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
+  const [generationNames, setGenerationNames] = useState<string[]>([]);
 
   const treeRef = useRef<ClanTreeHandle>(null);
+
+  // Fetch generation names when admin mode enters
+  useEffect(() => {
+    if (isAdminMode && window.CallBridge) {
+      // Set up callback for settings
+      window.onSettingsReceived = (key: string, value: string[]) => {
+        if (key === "generation_names" && Array.isArray(value)) {
+          setGenerationNames(value);
+        }
+      };
+      // Fetch generation names
+      window.CallBridge.invoke("getSettings", "generation_names");
+    }
+  }, [isAdminMode]);
 
   const handleNodeClick = (id: string) => fetchMemberDetail(id);
 
@@ -56,14 +78,32 @@ function App() {
     }
   };
 
+  const handleLogout = () => {
+    if (window.confirm("退出管理员模式?")) {
+      setIsAdminMode(false);
+      setIsDashboardOpen(false);
+      document.body.classList.remove("admin-mode");
+    }
+  };
+
+  const handleAddMember = () => {
+    setEditingMember(null);
+    setIsMemberFormOpen(true);
+  };
+
+  const handleEditMember = (member: FamilyMember) => {
+    setEditingMember(member);
+    setIsMemberFormOpen(true);
+  };
+
+
+
   return (
     <>
       <TopBar
         isAdmin={isAdminMode}
         onAdminClick={() =>
-          isAdminMode
-            ? window.confirm("退出?") && setIsAdminMode(false)
-            : setIsLoginOpen(true)
+          isAdminMode ? handleLogout() : setIsLoginOpen(true)
         }
         onSearch={handleSearch}
       />
@@ -95,6 +135,10 @@ function App() {
           console.log("App: onUpdatePortrait called", selectedMember?.id);
           if (selectedMember) updateMemberPortrait(selectedMember.id);
         }}
+        isAdminMode={isAdminMode}
+        onEditMember={() => {
+          if (selectedMember) handleEditMember(selectedMember);
+        }}
       />
 
       <MediaPlayer
@@ -108,6 +152,7 @@ function App() {
           close: media.actions.closeMedia,
           select: media.actions.setCurrentMediaUrl,
           upload: media.actions.uploadMedia,
+          deleteMedia: media.actions.deleteMedia,
           next: media.actions.next,
           prev: media.actions.prev,
           toggleAudio: media.actions.toggleAudio,
@@ -118,6 +163,7 @@ function App() {
           setAudioDuration: media.actions.setAudioDuration,
         }}
         avatarSrc={avatarSrc}
+        isAdminMode={isAdminMode}
       />
 
       <div className={`full-bio-overlay ${isFullBioOpen ? "active" : ""}`}>
@@ -151,6 +197,7 @@ function App() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            autoFocus
           />
           <div className="modal-actions">
             <button
@@ -171,6 +218,7 @@ function App() {
         id="adminDashboard"
       >
         <div className="dashboard-header">
+          <h2 className="dashboard-title">管理员工作台</h2>
           <button
             className="close-dashboard-btn"
             onClick={() => setIsDashboardOpen(false)}
@@ -179,9 +227,72 @@ function App() {
           </button>
         </div>
         <div className="dashboard-content">
-          <div style={{ color: "white", padding: 20 }}>管理员功能开发中...</div>
+          <div className="dashboard-cards">
+            <div className="dashboard-card" onClick={handleAddMember}>
+              <div className="card-icon">➕</div>
+              <div className="card-title">添加成员</div>
+              <div className="card-desc">录入新的家族成员</div>
+            </div>
+            <div
+              className="dashboard-card"
+              onClick={() =>
+                alert(`当前族谱共有 ${familyData.length} 位成员\n更多统计详情功能正在开发中！`)
+              }
+            >
+              <div className="card-icon">📊</div>
+              <div className="card-title">统计概览</div>
+              <div className="card-desc">共 {familyData.length} 位成员</div>
+            </div>
+            <div className="dashboard-card" onClick={() => setIsLogsOpen(true)}>
+              <div className="card-icon">📋</div>
+              <div className="card-title">操作日志</div>
+              <div className="card-desc">查看变更记录</div>
+            </div>
+          </div>
+
+          <div className="dashboard-section">
+            <h3>快速入口</h3>
+            <p className="dashboard-hint">
+              点击「添加成员」卡片开始录入，或关闭此面板后点击任意成员进行编辑。
+            </p>
+          </div>
         </div>
       </div>
+
+      {isAdminMode && !isDashboardOpen && (
+        <button
+          className="admin-fab"
+          onClick={() => setIsDashboardOpen(true)}
+          title="打开管理员工作台"
+        >
+          🛠️
+        </button>
+      )}
+
+      <MemberForm
+        isOpen={isMemberFormOpen}
+        onClose={() => {
+          setIsMemberFormOpen(false);
+          setEditingMember(null);
+        }}
+        member={editingMember}
+        allMembers={(() => {
+          const flatten = (nodes: FamilyMember[]): FamilyMember[] =>
+            nodes.flatMap((n) => [n, ...(n.children ? flatten(n.children) : [])]);
+          return flatten(familyData || []);
+        })()}
+        generationNames={generationNames}
+        onSaveComplete={(memberId) => {
+          // Wait a bit for tree data to refresh, then focus and show detail
+          setTimeout(() => {
+            treeRef.current?.focusNode(memberId);
+            fetchMemberDetail(memberId);
+            setIsDashboardOpen(false); // Close dashboard to show member detail
+          }, 300);
+        }}
+      />
+
+      <OperationLogs isOpen={isLogsOpen} onClose={() => setIsLogsOpen(false)} />
     </>
   );
 }
