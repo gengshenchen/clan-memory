@@ -46,6 +46,22 @@ export interface DeleteMemberResult {
   hasChildren?: boolean;
 }
 
+export interface BatchImportResult {
+  status: "completed" | "cancelled";
+  imported: number;
+  failed: number;
+  total: number;
+  resources?: Array<{
+    id: string;
+    title: string;
+    filePath: string;
+  }>;
+  errors?: Array<{
+    file: string;
+    error: string;
+  }>;
+}
+
 // 扩展 Window 接口
 declare global {
   interface Window {
@@ -58,6 +74,8 @@ declare global {
     onLocalImageLoaded?: (path: string, base64: string) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onResourceImported?: (data: any) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onMultipleResourcesImported?: (result: BatchImportResult) => void;
     // Admin management callbacks
     onMemberSaved?: (result: SaveMemberResult) => void;
     onMemberDeleted?: (result: DeleteMemberResult) => void;

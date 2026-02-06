@@ -57,7 +57,7 @@ compile_commands.json
 [Bb]in64/
 [Ll]ib/
 [Ll]ib64/
-# [Bb]uild*/
+[Bb]uild*/
 [Ii]nstaller*/
 *.7z
 *.zip
