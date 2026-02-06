@@ -100,10 +100,7 @@ function App() {
     setIsMemberFormOpen(true);
   };
 
-  const handleEditMember = (member: FamilyMember) => {
-    setEditingMember(member);
-    setIsMemberFormOpen(true);
-  };
+
 
 
 
@@ -146,9 +143,11 @@ function App() {
         }}
         isAdminMode={isAdminMode}
         onEditMember={() => {
-          if (selectedMember) handleEditMember(selectedMember);
+          setEditingMember(selectedMember);
+          setIsMemberFormOpen(true);
         }}
         mediaCounts={media.mediaCounts}
+        allMembers={familyData}
       />
 
       <MediaPlayer
