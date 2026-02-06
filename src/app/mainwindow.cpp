@@ -307,6 +307,22 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
             if (m_cefView)
                 m_cefView->executeJavascript(frameId, jsCode, "");
         }
+    } else if (method == "importMultipleResources") {
+        if (arguments.size() >= 2) {
+            QString memberId = arguments.at(0).toString();
+            QString type = arguments.at(1).toString();  // "video", "photo", "audio"
+
+            // 批量导入 - 调用支持多选的方法
+            QString jsonResult = m_jsBridge->importMultipleResources(memberId, type);
+
+            // 回调前端刷新列表
+            QString jsCode = QString(
+                                 "if(window.onMultipleResourcesImported) { "
+                                 "window.onMultipleResourcesImported(%1); }")
+                                 .arg(jsonResult);
+            if (m_cefView)
+                m_cefView->executeJavascript(frameId, jsCode, "");
+        }
     } else if (method == "fetchMemberResources") {
         if (arguments.size() >= 2) {
             QString memberId = arguments.at(0).toString();
@@ -351,6 +367,16 @@ void MainWindow::onInvokeMethod(const QCefBrowserId& browserId, const QCefFrameI
                     .arg(treeJson);
             if (m_cefView) {
                 m_cefView->executeJavascript(frameId, treeJs, "");
+            }
+
+            // 4. Notify frontend to re-focus on this member (important for tree focus after
+            // refresh)
+            QString portraitUpdatedJs =
+                QString(
+                    "if(window.onMemberPortraitUpdated) { window.onMemberPortraitUpdated('%1'); }")
+                    .arg(memberId);
+            if (m_cefView) {
+                m_cefView->executeJavascript(frameId, portraitUpdatedJs, "");
             }
 
             qInfo() << "[C++] Portrait updated, refreshed UI for member:" << memberId;

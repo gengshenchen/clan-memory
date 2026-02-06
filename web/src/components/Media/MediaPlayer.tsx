@@ -501,8 +501,8 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
                 }
               />
 
-              {/* Control Bar */}
-              {renderControlBar(false)}
+              {/* Control Bar - Only show when item is selected */}
+              {currentItem && renderControlBar(false)}
             </div>
 
             {/* Playlist Sidebar */}

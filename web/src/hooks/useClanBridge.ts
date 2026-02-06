@@ -64,6 +64,23 @@ export const useClanBridge = () => {
           }
         };
 
+        // Callback for when portrait is updated - scroll to member and re-select
+        window.onMemberPortraitUpdated = (memberId: string) => {
+          console.log("Portrait updated for member:", memberId);
+          
+          // Re-select the member to refresh details and avatar (C++ already refreshes tree)
+          fetchMemberDetail(memberId);
+          
+          // Focus on the member node in the tree after a short delay for DOM update
+          setTimeout(() => {
+            const focusFn = (window as unknown as { focusTreeNode?: (id: string) => void }).focusTreeNode;
+            if (focusFn) {
+              focusFn(memberId);
+              console.log("Focused tree on member:", memberId);
+            }
+          }, 300);
+        };
+
         window.onLocalImageLoaded = (_path, base64) => setAvatarSrc(base64);
 
         // 初始化加载

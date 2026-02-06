@@ -9,6 +9,13 @@ export const useMedia = (selectedMember: FamilyMember | null) => {
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [currentMediaUrl, setCurrentMediaUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
+  
+  // Media counts for SidePanel display
+  const [mediaCounts, setMediaCounts] = useState<{
+    video: number;
+    photo: number;
+    audio: number;
+  }>({ video: 0, photo: 0, audio: 0 });
 
   // Audio State
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -40,13 +47,52 @@ export const useMedia = (selectedMember: FamilyMember | null) => {
       data.forEach((item: any) => {
         if (!uniqueMap.has(item.url)) uniqueMap.set(item.url, item);
       });
-      setMediaList(Array.from(uniqueMap.values()));
+      const uniqueList = Array.from(uniqueMap.values());
+      
+      // Update counts for this type
+      if (type === 'video' || type === 'photo' || type === 'audio') {
+        setMediaCounts(prev => ({ ...prev, [type]: uniqueList.length }));
+      }
+      
+      // Only update media list if this is the currently active type
+      if (type === typeRef.current) {
+        setMediaList(uniqueList);
+      }
     };
 
     window.onResourceImported = (data) => {
       setIsUploading(false);
       if (data && data.status === "cancelled") return;
 
+      const currentMember = memberRef.current;
+      const currentType = typeRef.current;
+      if (currentMember && currentType) {
+        window.CallBridge?.invoke(
+          "fetchMemberResources",
+          currentMember.id,
+          currentType
+        );
+      }
+    };
+
+    // Batch import callback - handles multi-file import results
+    window.onMultipleResourcesImported = (result) => {
+      setIsUploading(false);
+      if (result.status === "cancelled") return;
+
+      // Show import results summary
+      if (result.imported > 0 || result.failed > 0) {
+        let message = `✅ 成功导入 ${result.imported} 个文件`;
+        if (result.failed > 0) {
+          message += `\n❌ 失败 ${result.failed} 个文件`;
+          if (result.errors && result.errors.length > 0) {
+            message += ":\n" + result.errors.map(e => `  - ${e.file}: ${e.error}`).join("\n");
+          }
+        }
+        alert(message);
+      }
+
+      // Refresh media list
       const currentMember = memberRef.current;
       const currentType = typeRef.current;
       if (currentMember && currentType) {
@@ -65,6 +111,19 @@ export const useMedia = (selectedMember: FamilyMember | null) => {
       setCurrentMediaUrl(mediaList[0].url);
     }
   }, [mediaList, currentMediaUrl]);
+
+  // 2.5 Auto-fetch media counts when member changes
+  useEffect(() => {
+    if (selectedMember?.id && window.CallBridge) {
+      // Reset counts first
+      setMediaCounts({ video: 0, photo: 0, audio: 0 });
+      // Fetch counts for all three types
+      const types = ['video', 'photo', 'audio'] as const;
+      types.forEach(type => {
+        window.CallBridge?.invoke("fetchMemberResources", selectedMember.id, type);
+      });
+    }
+  }, [selectedMember?.id]);
 
   // 3. 音频核心逻辑
   useEffect(() => {
@@ -125,7 +184,7 @@ export const useMedia = (selectedMember: FamilyMember | null) => {
       setIsUploading(true);
       setTimeout(() => {
         window.CallBridge?.invoke(
-          "importResource",
+          "importMultipleResources",  // Changed to batch import
           selectedMember.id,
           mediaType
         );
@@ -203,6 +262,7 @@ export const useMedia = (selectedMember: FamilyMember | null) => {
     currentMediaUrl,
     setCurrentMediaUrl,
     isUploading,
+    mediaCounts,  // Add for SidePanel display
     audioState: {
       isPlaying: isPlayingAudio,
       progress: audioProgress,
@@ -224,6 +284,13 @@ export const useMedia = (selectedMember: FamilyMember | null) => {
       setAudioProgress,
       setAudioDuration,
       setCurrentMediaUrl,
+      fetchMediaCounts: (memberId: string) => {
+        // Fetch counts for all three types
+        const types = ['video', 'photo', 'audio'] as const;
+        types.forEach(type => {
+          window.CallBridge?.invoke("fetchMemberResources", memberId, type);
+        });
+      },
     },
   };
 };

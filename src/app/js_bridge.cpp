@@ -186,6 +186,64 @@ QString JsBridge::importResource(const QString& memberId, const QString& type) {
     return doc.toJson(QJsonDocument::Compact);
 }
 
+QString JsBridge::importMultipleResources(const QString& memberId, const QString& type) {
+    if (memberId.isEmpty())
+        return "{\"error\": \"No member ID\"}";
+
+    QString filter;
+    if (type == "video")
+        filter = "Videos (*.mp4 *.avi *.mov *.mkv *.webm)";
+    else if (type == "photo")
+        filter = "Images (*.png *.jpg *.jpeg *.bmp *.gif)";
+    else if (type == "audio")
+        filter = "Audio (*.mp3 *.wav *.aac *.m4a *.flac)";
+
+    // Use getOpenFileNames for multi-select
+    QStringList filePaths = QFileDialog::getOpenFileNames(
+        nullptr, QString("Select %1 files (multi-select)").arg(type), QDir::homePath(), filter);
+
+    if (filePaths.isEmpty())
+        return "{\"status\": \"cancelled\", \"count\": 0}";
+
+    QJsonArray successArray;
+    QJsonArray errorArray;
+    int imported = 0;
+    int failed = 0;
+
+    for (const QString& filePath : filePaths) {
+        auto res = clan::core::ResourceManager::instance().ImportFile(
+            filePath.toStdString(), memberId.toStdString(), type.toStdString());
+
+        if (!res.id.empty()) {
+            QJsonObject jobj;
+            jobj["id"] = QString::fromStdString(res.id);
+            jobj["title"] = QString::fromStdString(res.title);
+            jobj["filePath"] = QString::fromStdString(res.file_path);
+            successArray.append(jobj);
+            imported++;
+        } else {
+            QJsonObject errObj;
+            errObj["file"] = QFileInfo(filePath).fileName();
+            errObj["error"] = "Import failed";
+            errorArray.append(errObj);
+            failed++;
+        }
+    }
+
+    QJsonObject result;
+    result["status"] = "completed";
+    result["imported"] = imported;
+    result["failed"] = failed;
+    result["total"] = filePaths.size();
+    result["resources"] = successArray;
+    if (!errorArray.isEmpty()) {
+        result["errors"] = errorArray;
+    }
+
+    QJsonDocument doc(result);
+    return doc.toJson(QJsonDocument::Compact);
+}
+
 QString JsBridge::fetchMemberResources(const QString& memberId, const QString& type) {
     auto list = clan::core::DatabaseManager::instance().GetMediaResources(memberId.toStdString(),
                                                                           type.toStdString());

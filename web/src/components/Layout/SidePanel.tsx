@@ -11,6 +11,7 @@ interface SidePanelProps {
   onUpdatePortrait: () => void;
   isAdminMode?: boolean;
   onEditMember?: () => void;
+  mediaCounts?: { video: number; photo: number; audio: number };
 }
 
 const SidePanel: React.FC<SidePanelProps> = ({
@@ -23,6 +24,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
   onUpdatePortrait,
   isAdminMode = false,
   onEditMember,
+  mediaCounts = { video: 0, photo: 0, audio: 0 },
 }) => {
   if (!member) return null;
 
@@ -145,15 +147,15 @@ const SidePanel: React.FC<SidePanelProps> = ({
           onClick={() => onOpenMedia("video")}
         >
           <i>🎥</i>
-          <span>{getVideoLabel()}</span>
+          <span>{getVideoLabel()}{mediaCounts.video > 0 && ` (${mediaCounts.video})`}</span>
         </div>
         <div className="action-btn" onClick={() => onOpenMedia("photo")}>
           <i>📷</i>
-          <span>照片</span>
+          <span>照片{mediaCounts.photo > 0 && ` (${mediaCounts.photo})`}</span>
         </div>
         <div className="action-btn" onClick={() => onOpenMedia("audio")}>
           <i>🎙️</i>
-          <span>录音</span>
+          <span>录音{mediaCounts.audio > 0 && ` (${mediaCounts.audio})`}</span>
         </div>
       </div>
 

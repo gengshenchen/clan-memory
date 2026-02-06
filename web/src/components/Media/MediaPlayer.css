@@ -27,6 +27,11 @@
   animation: mediaFadeIn 0.3s ease-out;
 }
 
+/* Global box-sizing reset for media player to prevent layout issues */
+.media-overlay-container * {
+  box-sizing: border-box;
+}
+
 /* Fullscreen mode - hide playlist and expand video */
 .media-overlay-container.fullscreen-mode .media-playlist {
   display: none !important;
@@ -756,6 +761,7 @@
   height: 100%;
   display: flex;
   position: relative;
+  overflow: visible !important;
 }
 
 .audio-stage {
@@ -764,10 +770,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px;
-  gap: 30px;
+  padding: 20px; /* Reduced from 40px to save space */
+  gap: 20px; /* Reduced gap */
   background: radial-gradient(ellipse at center, #1a1a2e 0%, #0d0d15 100%);
   position: relative;
+  height: 100%;
+  min-height: 0; /* Important for flex child shrinking */
+  overflow: hidden; /* Ensure control bar sits at bottom of VISIBLE area */
 }
 
 /* Spinning Disc - Vinyl Record Style */
@@ -907,6 +916,52 @@
   letter-spacing: 1px;
   text-align: center;
   max-width: 400px;
+}
+
+/* Audio player control bar - always visible at bottom */
+.audio-stage .control-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  background: rgba(0, 0, 0, 0.75) !important; /* Proper glassy background */
+  backdrop-filter: blur(10px); /* Modern blur effect */
+  padding: 16px 24px 16px !important;
+  z-index: 100 !important;
+}
+
+.audio-stage .control-bar.hidden {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure control buttons container is visible */
+.audio-stage .control-buttons {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.audio-stage .control-left,
+.audio-stage .control-center,
+.audio-stage .control-right {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.audio-stage .time-display,
+.audio-stage .play-btn,
+.audio-stage .skip-btn,
+.audio-stage .speed-btn,
+.audio-stage .icon-btn {
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 /* ===========================================

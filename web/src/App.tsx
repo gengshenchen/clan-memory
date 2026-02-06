@@ -52,6 +52,15 @@ function App() {
     }
   }, [isAdminMode]);
 
+  // Expose tree focus function globally for callbacks (portrait update, etc.)
+  useEffect(() => {
+    (window as unknown as { focusTreeNode?: (id: string) => void }).focusTreeNode = (id: string) => {
+      if (treeRef.current) {
+        treeRef.current.focusNode(id);
+      }
+    };
+  }, []);
+
   const handleNodeClick = (id: string) => fetchMemberDetail(id);
 
   const handleSearch = (text: string) => {
@@ -139,6 +148,7 @@ function App() {
         onEditMember={() => {
           if (selectedMember) handleEditMember(selectedMember);
         }}
+        mediaCounts={media.mediaCounts}
       />
 
       <MediaPlayer
