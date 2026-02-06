@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { type FamilyMember } from "../../types";
+import "./DeleteMemberDialog.css";
 
 interface DeleteMemberDialogProps {
   isOpen: boolean;
@@ -69,58 +70,57 @@ export const DeleteMemberDialog: React.FC<DeleteMemberDialogProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div className="delete-dialog-overlay" onClick={onClose}>
       <div
-        className="relative w-[400px] bg-[#1a1a2e] rounded-xl border border-white/10 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
+        className="delete-dialog-container"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
-          <h3 className="text-lg font-medium text-white flex items-center gap-2">
-            <span className="text-red-500">🗑️</span> 删除成员
+        <div className="delete-dialog-header">
+          <h3 className="delete-dialog-title">
+            <span className="delete-icon">🗑️</span> 删除成员
           </h3>
-          <button
-            onClick={onClose}
-            className="text-white/50 hover:text-white transition-colors text-xl leading-none"
-          >
+          <button onClick={onClose} className="close-btn" title="关闭">
             &times;
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
-          <div className="flex items-start gap-4">
-             <div className="w-12 h-12 rounded-full overflow-hidden bg-white/10 flex-shrink-0 border border-white/20">
+        <div className="delete-dialog-content">
+          <div className="member-info-card">
+             <div className="member-avatar-container">
                 {member.portraitPath ? (
-                    <img src={member.portraitPath} alt={member.name} className="w-full h-full object-cover" />
+                    <img src={member.portraitPath} alt={member.name} className="member-avatar" />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl">👤</div>
+                    <div className="member-avatar-placeholder">
+                        {member.gender === 'F' ? '👩' : '👨'}
+                    </div>
                 )}
              </div>
-             <div>
-                <h4 className="text-lg font-medium text-[var(--gold)]">{member.name}</h4>
-                <p className="text-sm text-white/50 mt-1">
+             <div className="member-details">
+                <h4>{member.name}</h4>
+                <p className="member-meta">
                     第 {member.generation} 世 | {member.gender === 'M' ? '男' : '女'}
                 </p>
              </div>
           </div>
 
           {hasChildren ? (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-start gap-3">
-              <div className="text-xl">⚠️</div>
-              <div>
-                <h5 className="text-red-400 font-medium mb-1">无法删除此成员</h5>
-                <p className="text-sm text-red-300/80 leading-relaxed">
-                  检测到该成员有 <span className="text-white font-bold">关联后代</span>。<br/>
+            <div className="warning-box">
+              <div className="warning-icon">⚠️</div>
+              <div className="warning-text">
+                <h5>无法删除此成员</h5>
+                <p>
+                  检测到该成员有 <span style={{fontWeight: 'bold', color: '#fff'}}>关联后代</span>。<br/>
                   为了保持族谱完整性，请先删除其所有子女或断开父子关系。
                 </p>
               </div>
             </div>
           ) : (
-            <div className="bg-white/5 border border-white/10 rounded-lg p-4">
-                <p className="text-white/80 leading-relaxed">
-                    确定要彻底删除该成员吗？<br/>
-                    <span className="text-sm text-white/50 block mt-2">
+            <div className="confirmation-box">
+                <p className="confirmation-text">
+                    确定要彻底删除该成员吗？
+                    <span className="sub-text">
                     此操作不可撤销，关联的媒体资料也将被移除。
                     </span>
                 </p>
@@ -128,17 +128,18 @@ export const DeleteMemberDialog: React.FC<DeleteMemberDialogProps> = ({
           )}
 
           {error && !hasChildren && (
-            <div className="text-red-400 text-sm bg-red-500/10 p-2 rounded border border-red-500/20 text-center">
+            <div className="error-message">
               {error}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 bg-black/20 border-t border-white/10">
+        <div className="delete-dialog-footer">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+            className="btn-dialog-cancel"
+            disabled={isDeleting}
           >
             取消
           </button>
@@ -147,11 +148,11 @@ export const DeleteMemberDialog: React.FC<DeleteMemberDialogProps> = ({
             <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-500 shadow-lg shadow-red-900/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-dialog-delete"
             >
                 {isDeleting ? (
                     <>
-                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <div className="spinner"></div>
                     删除中...
                     </>
                 ) : (
@@ -163,7 +164,7 @@ export const DeleteMemberDialog: React.FC<DeleteMemberDialogProps> = ({
           {hasChildren && (
              <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-black bg-white/90 hover:bg-white shadow-lg transition-all"
+                className="btn-dialog-ok"
             >
                 知道了
             </button>
