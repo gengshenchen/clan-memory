@@ -1254,3 +1254,45 @@ body.admin-mode .admin-dashboard.active {
   to { transform: scale(1); }
 }
 
+
+/* Search Results Modal */
+.search-results-box {
+  width: 500px;
+  max-width: 90vw;
+  text-align: left;
+  padding: 30px;
+}
+.search-result-list {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.search-result-list li {
+  background: #333;
+  margin-bottom: 10px;
+  padding: 15px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+.search-result-list li:hover {
+  background: #444;
+  border-color: var(--gold);
+}
+.result-name {
+  font-size: 18px;
+  color: var(--text-primary);
+  font-weight: bold;
+}
+.result-name small {
+  font-weight: normal;
+  color: var(--text-secondary);
+}
+.result-meta {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 5px;
+}

@@ -243,3 +243,10 @@ $RECYCLE.BIN/
 
 # 忽略 Clangd 和其他編輯器的快取目錄
 /.cache/
+
+# Web artifacts
+web/node_modules/
+web/dist/
+node_modules/
+dist/
+

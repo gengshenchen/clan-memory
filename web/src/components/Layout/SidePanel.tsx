@@ -102,7 +102,10 @@ const SidePanel: React.FC<SidePanelProps> = ({
             )}
           </div>
 
-          <h2 className="profile-name">{member.name}</h2>
+          <h2 className="profile-name">
+            {member.name}
+            {member.aliases && <span style={{fontSize: '0.6em', color: '#aaa', marginLeft: '10px', fontWeight: 'normal'}}>({member.aliases})</span>}
+          </h2>
           <div className="profile-generation">
             第{member.generation}世 · "{member.generationName}"字辈
           </div>
