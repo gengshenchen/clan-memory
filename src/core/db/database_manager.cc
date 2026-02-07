@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <vector>
 
 #include "core/log/log.h"
@@ -49,11 +50,55 @@ void DatabaseManager::Initialize(const std::string& dbPath) {
         // Create Tables
         CreateTables();
 
-        // FTS Check
-        CheckFTSSupport();
+        // Check and migrate schema (Ensure 'aliases' column exists)
+        CheckAndMigrateSchema();
+
+        // FTS Rebuild removed: We now use standard SQL LIKE queries for robustness.
+        // The FTS table is no longer critical for the main search function.
 
     } catch (std::exception& e) {
         LOGERROR("[DB] Initialize failed: {}", e.what());
+    }
+}
+
+void DatabaseManager::CheckAndMigrateSchema() {
+    if (!db_)
+        return;
+    try {
+        // Check if aliases column exists in members table
+        bool hasAliases = false;
+        SQLite::Statement query(*db_, "PRAGMA table_info(members)");
+        while (query.executeStep()) {
+            std::string colName = query.getColumn("name").getText();
+            if (colName == "aliases") {
+                hasAliases = true;
+                break;
+            }
+        }
+
+        if (!hasAliases) {
+            LOGINFO("[DB] Migrating: Adding 'aliases' column to members table...");
+            db_->exec("ALTER TABLE members ADD COLUMN aliases TEXT");
+
+            // Rebuild FTS trigger definitions will happen if FTS tables are recreated
+            // But for simple column add, we might need to update triggers if possible
+            // Since triggers are created in CreateTables using IF NOT EXISTS,
+            // we should drop and recreate them to include the new column.
+            db_->exec("DROP TRIGGER IF EXISTS members_ai");
+            db_->exec("DROP TRIGGER IF EXISTS members_ad");
+            db_->exec("DROP TRIGGER IF EXISTS members_au");
+
+            // Note: FTS schema needs update too if we want to search aliases.
+            // FTS5 tables don't support ADD COLUMN easily.
+            // Simpler approach for migration: Drop and recreate FTS table.
+            db_->exec("DROP TABLE IF EXISTS members_fts");
+
+            // Re-run CreateTables to recreate triggers and FTS
+            CreateTables();
+        }
+
+    } catch (std::exception& e) {
+        LOGERROR("[DB] Schema migration failed: {}", e.what());
     }
 }
 
@@ -81,6 +126,7 @@ void DatabaseManager::CreateTables() {
                 death_place TEXT,
                 portrait_path TEXT,
                 bio TEXT,
+                aliases TEXT,
                 created_at INTEGER,
                 updated_at INTEGER
             );
@@ -91,23 +137,30 @@ void DatabaseManager::CreateTables() {
         // We link it to members via triggers or manual updates.
         // Here we use Contentless or External Content FTS if needed,
         // but for simplicity in v0.5, we populate it manually or via triggers.
+        // 2. Full Text Search (FTS5) Virtual Table
+        // Re-create to ensure schema is up-to-date (simple migration strategy)
+        db_->exec("DROP TABLE IF EXISTS members_fts;");
         db_->exec(R"(
             CREATE VIRTUAL TABLE IF NOT EXISTS members_fts USING fts5(
-                name, bio, content='members', content_rowid='rowid'
+                name, bio, aliases, content='members', content_rowid='rowid'
             );
         )");
+
+        // Re-populate FTS if empty (or always since we dropped it?)
+        // Since we droppped it, we must re-populate it.
+        db_->exec("INSERT INTO members_fts(members_fts) VALUES('rebuild');");
 
         // Triggers to keep FTS in sync with Members
         db_->exec(R"(
             CREATE TRIGGER IF NOT EXISTS members_ai AFTER INSERT ON members BEGIN
-              INSERT INTO members_fts(rowid, name, bio) VALUES (new.rowid, new.name, new.bio);
+              INSERT INTO members_fts(rowid, name, bio, aliases) VALUES (new.rowid, new.name, new.bio, new.aliases);
             END;
             CREATE TRIGGER IF NOT EXISTS members_ad AFTER DELETE ON members BEGIN
-              INSERT INTO members_fts(members_fts, rowid, name, bio) VALUES('delete', old.rowid, old.name, old.bio);
+              INSERT INTO members_fts(members_fts, rowid, name, bio, aliases) VALUES('delete', old.rowid, old.name, old.bio, old.aliases);
             END;
             CREATE TRIGGER IF NOT EXISTS members_au AFTER UPDATE ON members BEGIN
-              INSERT INTO members_fts(members_fts, rowid, name, bio) VALUES('delete', old.rowid, old.name, old.bio);
-              INSERT INTO members_fts(rowid, name, bio) VALUES (new.rowid, new.name, new.bio);
+              INSERT INTO members_fts(members_fts, rowid, name, bio, aliases) VALUES('delete', old.rowid, old.name, old.bio, old.aliases);
+              INSERT INTO members_fts(rowid, name, bio, aliases) VALUES (new.rowid, new.name, new.bio, new.aliases);
             END;
         )");
 
@@ -228,6 +281,8 @@ std::vector<Member> DatabaseManager::GetAllMembers() {
 
             m.portrait_path = query.getColumn("portrait_path").getText();
             m.bio = query.getColumn("bio").getText();
+            if (!query.getColumn("aliases").isNull())
+                m.aliases = query.getColumn("aliases").getText();
 
             result.push_back(m);
         }
@@ -267,6 +322,8 @@ Member DatabaseManager::GetMemberById(const std::string& id) {
             m.death_place = query.getColumn("death_place").getText();
             m.portrait_path = query.getColumn("portrait_path").getText();
             m.bio = query.getColumn("bio").getText();
+            if (!query.getColumn("aliases").isNull())
+                m.aliases = query.getColumn("aliases").getText();
         }
     } catch (std::exception& e) {
         LOGERROR("[DB] GetMemberById failed: {}", e.what());
@@ -281,31 +338,78 @@ std::vector<Member> DatabaseManager::SearchMembers(const std::string& keyword) {
         return result;
 
     try {
-        // Hybrid Search:
-        // 1. Exact match on name (High priority)
-        // 2. Full-text search on bio (FTS)
-        // Note: FTS syntax usually requires sanitization.
-        // Simple implementation:
-        std::string ftsQuery = "\"" + keyword + "\"";  // Exact phrase search
+        // Tokenize keyword
+        std::istringstream iss(keyword);
+        std::vector<std::string> tokens;
+        std::string token;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
 
-        SQLite::Statement query(*db_, R"(
-            SELECT m.* FROM members m
-            JOIN members_fts f ON m.rowid = f.rowid
-            WHERE members_fts MATCH ?
-            ORDER BY rank
-        )");
-        query.bind(1, ftsQuery);
+        if (tokens.empty())
+            return result;
+
+        // Build SQL Query using LIKE
+        // "SELECT ... WHERE (name LIKE ? OR aliases LIKE ?) OR (name LIKE ? OR aliases LIKE ?) ..."
+        std::string sql = R"(
+                SELECT m.*, f.name as father_name
+                FROM members m
+                LEFT JOIN members f ON m.father_id = f.id
+                WHERE 
+            )";
+
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            if (i > 0)
+                sql += " OR ";
+            sql += " (m.name LIKE ? OR IFNULL(m.aliases, '') LIKE ?) ";
+        }
+
+        // Order by generation for a sensible default
+        sql += " ORDER BY m.generation ASC, m.name ASC";
+
+        SQLite::Statement query(*db_, sql);
+
+        // Bind parameters
+        int paramIdx = 1;
+        for (const auto& t : tokens) {
+            std::string pattern = "%" + t + "%";
+            query.bind(paramIdx++, pattern);
+            query.bind(paramIdx++, pattern);
+        }
 
         while (query.executeStep()) {
             Member m;
             m.id = query.getColumn("id").getText();
             m.name = query.getColumn("name").getText();
+            m.gender = query.getColumn("gender").getText();
             m.generation = query.getColumn("generation").getInt();
+            m.generation_name = query.getColumn("generation_name").getText();
+
+            if (!query.getColumn("father_id").isNull()) {
+                m.father_id = query.getColumn("father_id").getText();
+            }
+            if (!query.getColumn("father_name").isNull()) {
+                m.father_name = query.getColumn("father_name").getText();
+            }
+
+            if (!query.getColumn("mother_id").isNull())
+                m.mother_id = query.getColumn("mother_id").getText();
+            if (!query.getColumn("spouse_name").isNull())
+                m.spouse_name = query.getColumn("spouse_name").getText();
+
+            m.birth_date = query.getColumn("birth_date").getText();
+            m.death_date = query.getColumn("death_date").getText();
+            m.birth_place = query.getColumn("birth_place").getText();
+            m.death_place = query.getColumn("death_place").getText();
+            m.portrait_path = query.getColumn("portrait_path").getText();
             m.bio = query.getColumn("bio").getText();
+            if (!query.getColumn("aliases").isNull())
+                m.aliases = query.getColumn("aliases").getText();
+
             result.push_back(m);
         }
     } catch (std::exception& e) {
-        LOGERROR("[DB] SearchMembers failed: {}", e.what());
+        LOGERROR("[DB] SearchMembers (LIKE) failed: {}", e.what());
     }
     return result;
 }
@@ -466,7 +570,7 @@ void DatabaseManager::SaveMember(const Member& m) {
                     name = ?, gender = ?, generation = ?, generation_name = ?,
                     father_id = ?, spouse_name = ?, mother_id = ?,
                     birth_date = ?, death_date = ?, birth_place = ?, death_place = ?,
-                    portrait_path = ?, bio = ?, updated_at = ?
+                    portrait_path = ?, bio = ?, aliases = ?, updated_at = ?
                 WHERE id = ?
             )");
             query.bind(1, m.name);
@@ -482,8 +586,9 @@ void DatabaseManager::SaveMember(const Member& m) {
             query.bind(11, m.death_place);
             query.bind(12, m.portrait_path);
             query.bind(13, m.bio);
-            query.bind(14, now);
-            query.bind(15, m.id);
+            query.bind(14, m.aliases);
+            query.bind(15, now);
+            query.bind(16, m.id);
             query.exec();
             LOGINFO("[DB] Updated member: {} (id={})", m.name, m.id);
         } else {
@@ -491,8 +596,8 @@ void DatabaseManager::SaveMember(const Member& m) {
             SQLite::Statement query(*db_, R"(
                 INSERT INTO members (id, name, gender, generation, generation_name,
                     father_id, spouse_name, mother_id, birth_date, death_date,
-                    birth_place, death_place, portrait_path, bio, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    birth_place, death_place, portrait_path, bio, aliases, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             )");
             query.bind(1, m.id);
             query.bind(2, m.name);
@@ -508,8 +613,9 @@ void DatabaseManager::SaveMember(const Member& m) {
             query.bind(12, m.death_place);
             query.bind(13, m.portrait_path);
             query.bind(14, m.bio);
-            query.bind(15, now);
+            query.bind(15, m.aliases);
             query.bind(16, now);
+            query.bind(17, now);
             query.exec();
             LOGINFO("[DB] Inserted new member: {} (id={})", m.name, m.id);
         }

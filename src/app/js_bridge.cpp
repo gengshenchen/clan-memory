@@ -82,6 +82,7 @@ QString JsBridge::fetchMemberDetail(const QString& id) {
     jobj["deathPlace"] = QString::fromStdString(m.death_place);
     jobj["portraitPath"] = QString::fromStdString(m.portrait_path);
     jobj["bio"] = QString::fromStdString(m.bio);
+    jobj["aliases"] = QString::fromStdString(m.aliases);
 
     QJsonDocument doc(jobj);
     return doc.toJson(QJsonDocument::Compact);
@@ -127,29 +128,59 @@ QString JsBridge::getLocalImage(const QString& filePath) {
 }
 
 QString JsBridge::searchMembers(const QString& keyword) {
-    if (keyword.trimmed().isEmpty()) {
+    try {
+        if (keyword.trimmed().isEmpty()) {
+            return "[]";
+        }
+
+        LOGINFO("[JsBridge] Search keyword: {}", keyword.toStdString());
+
+        auto& db = clan::core::DatabaseManager::instance();
+        // This relies on SQL LIKE query now, so it should be robust
+        auto results = db.SearchMembers(keyword.toStdString());
+
+        LOGINFO("[JsBridge] Search returned {} results", results.size());
+
+        QJsonArray jsonArray;
+        for (const auto& m : results) {
+            QJsonObject jobj;
+            try {
+                jobj["id"] = QString::fromStdString(m.id);
+                jobj["name"] = QString::fromStdString(m.name);
+                jobj["generation"] = m.generation;
+                jobj["generationName"] = QString::fromStdString(m.generation_name);
+                jobj["parentId"] = QString::fromStdString(m.father_id);
+                jobj["fatherName"] = QString::fromStdString(m.father_name);
+                jobj["spouseName"] = QString::fromStdString(m.spouse_name);
+                // Ensure aliases is valid (handle nulls if any sneak in)
+                jobj["aliases"] = QString::fromStdString(m.aliases);
+
+                QString bio = QString::fromStdString(m.bio);
+                if (bio.length() > 50) {
+                    bio = bio.left(50) + "...";
+                }
+                jobj["bioSnippet"] = bio;
+                jsonArray.append(jobj);
+            } catch (std::exception& ex) {
+                LOGERROR("[JsBridge] Serialization error for member {}: {}", m.id, ex.what());
+                continue;  // Skip bad member
+            }
+        }
+
+        QJsonDocument doc(jsonArray);
+        return doc.toJson(QJsonDocument::Compact);
+
+    } catch (std::exception& e) {
+        LOGERROR("[JsBridge] Search fatal error: {}", e.what());
+        QJsonArray errArr;
+        QJsonObject errObj;
+        errObj["error"] = QString::fromStdString(e.what());
+        errArr.append(errObj);
+        return QJsonDocument(errArr).toJson(QJsonDocument::Compact);
+    } catch (...) {
+        LOGERROR("[JsBridge] Search unknown fatal error");
         return "[]";
     }
-
-    auto& db = clan::core::DatabaseManager::instance();
-    auto results = db.SearchMembers(keyword.toStdString());
-
-    QJsonArray jsonArray;
-    for (const auto& m : results) {
-        QJsonObject jobj;
-        jobj["id"] = QString::fromStdString(m.id);
-        jobj["name"] = QString::fromStdString(m.name);
-        jobj["generation"] = m.generation;
-        QString bio = QString::fromStdString(m.bio);
-        if (bio.length() > 50) {
-            bio = bio.left(50) + "...";
-        }
-        jobj["bioSnippet"] = bio;
-        jsonArray.append(jobj);
-    }
-
-    QJsonDocument doc(jsonArray);
-    return doc.toJson(QJsonDocument::Compact);
 }
 
 QString JsBridge::importResource(const QString& memberId, const QString& type) {
@@ -352,6 +383,7 @@ QString JsBridge::saveMember(const QString& memberJson) {
     m.death_place = obj["deathPlace"].toString().toStdString();
     m.portrait_path = obj["portraitPath"].toString().toStdString();
     m.bio = obj["bio"].toString().toStdString();
+    m.aliases = obj["aliases"].toString().toStdString();
 
     // Generate new ID if not provided
     if (m.id.empty()) {
@@ -453,12 +485,11 @@ QString JsBridge::getOperationLogs(int limit, int offset) {
 }
 
 QString JsBridge::selectFile(const QString& filter) {
-    // Open file dialog without saving - just return path
     QString fileName = QFileDialog::getOpenFileName(
         nullptr,
-        tr("选择文件 (Select File)"),
+        tr("选择文件"),
         QStandardPaths::writableLocation(QStandardPaths::PicturesLocation),
         filter.isEmpty() ? tr("Images (*.png *.jpg *.jpeg *.bmp)") : filter);
 
-    return fileName;  // Empty if cancelled
+    return fileName;
 }

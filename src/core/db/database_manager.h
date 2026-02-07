@@ -42,10 +42,12 @@ struct Member {
     std::string gender;  // "M" or "F"
     int generation = 1;
     std::string generation_name;  // 字辈 (如 "定", "英")
+    std::string aliases;          // 别名 (JSON or comma separated)
 
     // 关系
-    std::string father_id;
-    std::string mother_id;    // 母系关联
+    std::string father_id;    // 父亲 ID
+    std::string father_name;  // 父亲姓名 (Query result only)
+    std::string mother_id;    // 母亲 ID系关联
     std::string spouse_name;  // 配偶姓名
 
     // 时间与地点 (使用 ISO 8601 字符串 "YYYY-MM-DD")
@@ -88,6 +90,8 @@ public:
                          const std::string& targetId, const std::string& targetName,
                          const std::string& changes);
     std::vector<OperationLog> GetOperationLogs(int limit = 100, int offset = 0);
+
+    // Batch Import
 
 private:
     DatabaseManager();

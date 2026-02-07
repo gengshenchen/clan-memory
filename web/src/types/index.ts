@@ -12,6 +12,8 @@ export interface FamilyMember {
   birthPlace?: string;
   deathPlace?: string;
   portraitPath?: string;
+  aliases?: string;
+  fatherName?: string;
   bio?: string;
   children?: FamilyMember[];
 }

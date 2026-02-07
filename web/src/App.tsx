@@ -35,6 +35,8 @@ function App() {
   const [isMemberFormOpen, setIsMemberFormOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [generationNames, setGenerationNames] = useState<string[]>([]);
+  const [searchResults, setSearchResults] = useState<FamilyMember[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   const treeRef = useRef<ClanTreeHandle>(null);
 
@@ -63,14 +65,56 @@ function App() {
 
   const handleNodeClick = (id: string) => fetchMemberDetail(id);
 
+  // Define callback interface for global window object
+  useEffect(() => {
+    // @ts-ignore
+    window.onSearchResultsReceived = (results: any) => {
+        console.log("Async search results received:", results);
+        if (results && results.length > 0) {
+            if (results.length === 1) {
+                const target = results[0];
+                if (treeRef.current) {
+                    treeRef.current.focusNode(target.id);
+                }
+                fetchMemberDetail(target.id);
+            } else {
+                setSearchResults(results);
+                setShowSearchResults(true);
+            }
+        } else {
+             alert("未找到匹配成员");
+        }
+    };
+    
+    // Cleanup
+    return () => {
+        // @ts-ignore
+        delete window.onSearchResultsReceived;
+    };
+  }, []);
+
   const handleSearch = (text: string) => {
     if (!text) return;
+
+    // Use backend search (supports aliases and robust LIKE query)
+    if (window.CallBridge) {
+        console.log("Invoking searchMembers:", text);
+        try {
+            window.CallBridge.invoke("searchMembers", text);
+            // Result will be handled by window.onSearchResultsReceived
+        } catch (e) {
+            console.error("Search invoke failed:", e);
+        }
+        return;
+    }
+
+    // Fallback: Client-side search (Name only)
     const target = familyData.find((m: FamilyMember) => m.name.includes(text));
     if (target) {
       treeRef.current?.focusNode(target.id);
       fetchMemberDetail(target.id);
     } else {
-      alert("未找到名为 " + text + " 的成员");
+      alert("未找到匹配成员");
     }
   };
 
@@ -99,6 +143,8 @@ function App() {
     setEditingMember(null);
     setIsMemberFormOpen(true);
   };
+
+
 
 
 
@@ -300,6 +346,36 @@ function App() {
           }, 300);
         }}
       />
+
+      <div className={`modal-overlay ${showSearchResults ? "active" : ""}`} onClick={() => setShowSearchResults(false)}>
+         <div className="modal-box search-results-box" onClick={e => e.stopPropagation()}>
+             <h3 className="modal-title">搜索结果</h3>
+             {!searchResults || searchResults.length === 0 ? (
+                 <p style={{color: '#888', margin: '20px 0'}}>未找到匹配成员</p>
+             ) : (
+                 <ul className="search-result-list">
+                     {searchResults.map(m => (
+                         <li key={m.id} onClick={() => {
+                             treeRef.current?.focusNode(m.id);
+                             fetchMemberDetail(m.id);
+                             setShowSearchResults(false);
+                         }}>
+                             <div className="result-name">
+                                 {m.name} 
+                                 {m.aliases && <small> ({m.aliases})</small>}
+                             </div>
+                             <div className="result-meta">
+                                 {m.generation}世 · {m.generationName}字辈 
+                                {m.spouseName ? ` | 配偶: ${m.spouseName}` : ""}
+                                {m.fatherName ? ` | 父亲: ${m.fatherName}` : (m.parentId ? "" : " | 始祖")}
+                             </div>
+                         </li>
+                     ))}
+                 </ul>
+             )}
+             <button className="btn btn-secondary" style={{marginTop: 20}} onClick={() => setShowSearchResults(false)}>关闭</button>
+         </div>
+      </div>
 
       <OperationLogs isOpen={isLogsOpen} onClose={() => setIsLogsOpen(false)} />
     </>

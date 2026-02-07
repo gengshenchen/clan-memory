@@ -24,7 +24,8 @@ public slots:
     Q_INVOKABLE QString getSettings(const QString& key);
     Q_INVOKABLE void saveSettings(const QString& key, const QString& value);
     Q_INVOKABLE QString getOperationLogs(int limit, int offset);
-    Q_INVOKABLE QString selectFile(const QString& filter);  // Select file without saving
+    Q_INVOKABLE QString selectFile(const QString& filter);
+
     Q_INVOKABLE QString importMultipleResources(const QString& memberId,
                                                 const QString& type);  // Batch import
 };

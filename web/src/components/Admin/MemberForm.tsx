@@ -27,7 +27,9 @@ interface FormData {
   bio: string;
   isNew: boolean;
   isLiving: boolean;
+
   portraitPath: string;
+  aliases: string;
 }
 
 const defaultFormData: FormData = {
@@ -46,6 +48,7 @@ const defaultFormData: FormData = {
   isNew: true,
   isLiving: true,
   portraitPath: "",
+  aliases: "",
 };
 
 export const MemberForm: React.FC<MemberFormProps> = ({
@@ -83,7 +86,9 @@ export const MemberForm: React.FC<MemberFormProps> = ({
           bio: member.bio || "",
           isNew: false,
           isLiving: !member.deathDate,
+
           portraitPath: member.portraitPath || "",
+          aliases: member.aliases || "",
         });
         
         // Load avatar preview if exists
@@ -155,6 +160,7 @@ export const MemberForm: React.FC<MemberFormProps> = ({
                 ...prev,
                 parentId: newParentId,
                 generation: parent.generation + 1,
+                generationName: generationNames[parent.generation] || "", // generation is 1-indexed, so parent.generation (index) is next gen
             }));
         } else {
             setFormData(prev => ({
@@ -185,17 +191,13 @@ export const MemberForm: React.FC<MemberFormProps> = ({
     }
 
     // Check generation name
-    if (!formData.generationName && generationNames[formData.generation-1]) {
-         // Auto-fill or require? Let's require consistency
-         // Actually generationName is usually derived or selected.
-         // If selected from dropdown, it should be fine.
+    if (!formData.generationName.trim()) {
+         newErrors.generationName = "字辈不能为空";
     }
     
-    // Check first ancestor
+    // Check first ancestor (strict check)
     if (!formData.parentId && formData.generation > 1) {
-        // Warning: member with generation > 1 should have a parent
-        // But maybe we allow adding disconnected branches?
-        // Let's allow for now but maybe warn.
+        newErrors.parentId = "非始祖成员必须选择父亲";
     }
     
     // Check duplicate name (simple check)
@@ -203,17 +205,29 @@ export const MemberForm: React.FC<MemberFormProps> = ({
         const exists = allMembers.some(m => m.name === formData.name && m.parentId === formData.parentId);
         if (exists) {
             if (!confirm(`存在同名成员 (父ID: ${formData.parentId||"无"})，确定要继续吗？`)) {
-                 return false;
+                 newErrors.duplicate = "用户取消保存"; // Add a special error or just return non-empty
+                 return newErrors;
             }
         }
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   const handleSave = () => {
-    if (!validate()) return;
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+        // If the only error is 'duplicate' (cancelled), just return without alert
+        if (validationErrors.duplicate && Object.keys(validationErrors).length === 1) {
+            return;
+        }
+        
+        const msg = Object.values(validationErrors).join("\n");
+        // Alert the user about missing fields
+        alert("请完善以下信息：\n" + msg);
+        return;
+    }
 
     setSaving(true);
     setError(null);
@@ -223,6 +237,12 @@ export const MemberForm: React.FC<MemberFormProps> = ({
       // If living, clear death date
       deathDate: formData.isLiving ? "" : formData.deathDate,
       deathPlace: formData.isLiving ? "" : formData.deathPlace,
+      // Normalize aliases: split by comma, Chinese comma, or whitespace
+      aliases: formData.aliases
+        .split(/[,，\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(","),
     };
 
     // Callback setup
@@ -368,6 +388,21 @@ export const MemberForm: React.FC<MemberFormProps> = ({
                       <span>女</span>
                     </label>
                   </div>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group full-width">
+                  <label htmlFor="aliases">别名 / 昵称</label>
+                  <input
+                    type="text"
+                    id="aliases"
+                    name="aliases"
+                    value={formData.aliases}
+                    onChange={handleChange}
+                    placeholder="如有多个，可用逗号或空格分隔 (如: 字某某 号某某)"
+                    maxLength={100}
+                  />
                 </div>
               </div>
 
